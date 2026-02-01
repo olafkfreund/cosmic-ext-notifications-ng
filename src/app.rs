@@ -170,11 +170,22 @@ impl CosmicNotifications {
         let mut body_elements: Vec<Element<'static, Message>> = Vec::new();
 
         // Add notification image if present and enabled
+        // Check hints first, then fall back to app_icon
         if config.show_images {
             if let Some(image) = n.image() {
+                // Image from hints (image-data, image-path)
                 if let Some(img_elem) = self.render_notification_image(image) {
                     body_elements.push(img_elem);
                 }
+            } else if !n.app_icon.is_empty() {
+                // Fallback to app_icon (from notify-send -i or app_icon parameter)
+                let icon_elem: Element<'static, Message> = container(
+                    icon::from_name(n.app_icon.as_str()).size(64).icon()
+                )
+                .width(Length::Fixed(64.0))
+                .height(Length::Fixed(64.0))
+                .into();
+                body_elements.push(icon_elem);
             }
         }
 

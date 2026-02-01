@@ -56,12 +56,15 @@ pub fn has_rich_content(text: &str) -> bool {
 /// This converts HTML entities and removes all markup,
 /// leaving only the text content.
 pub fn strip_html(html: &str) -> String {
+  // FIRST decode HTML entities so we can recognize entity-encoded tags
+  // (e.g., &lt;a href=...&gt; becomes <a href=...>)
+  let decoded = decode_entities(html);
+
   // Remove all HTML tags with regex
   let tag_regex = regex::Regex::new(r"<[^>]*>").unwrap();
-  let without_tags = tag_regex.replace_all(html, "");
+  let without_tags = tag_regex.replace_all(&decoded, "");
 
-  // Decode HTML entities
-  decode_entities(&without_tags)
+  without_tags.into_owned()
 }
 
 /// Extract URLs from href attributes in anchor tags.
@@ -69,12 +72,16 @@ pub fn strip_html(html: &str) -> String {
 /// This parses `<a href="...">` tags and extracts the URL from the href attribute.
 /// Returns a vector of (url, link_text) tuples.
 pub fn extract_hrefs(html: &str) -> Vec<(String, String)> {
+  // First decode HTML entities so we can recognize entity-encoded anchor tags
+  // (e.g., &lt;a href=&quot;...&quot;&gt; becomes <a href="...">)
+  let decoded = decode_entities(html);
+
   let href_regex = regex::Regex::new(
     r#"<a\s+[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([^<]*)</a>"#
   ).unwrap();
 
   href_regex
-    .captures_iter(html)
+    .captures_iter(&decoded)
     .filter_map(|cap| {
       let url = cap.get(1)?.as_str().to_string();
       let text = cap.get(2)?.as_str().to_string();
@@ -361,12 +368,13 @@ mod tests {
   }
 
   #[test]
-  fn test_strip_html_converts_entities() {
+  fn test_strip_html_decodes_and_strips_entity_encoded_tags() {
+    // Entity-encoded HTML tags should be decoded then stripped
     let input = "&lt;b&gt;text&lt;/b&gt; &amp; more";
     let output = strip_html(input);
     assert_eq!(
-      output, "<b>text</b> & more",
-      "Should convert HTML entities to plain text"
+      output, "text & more",
+      "Should decode entities then strip tags, preserving non-tag text"
     );
   }
 
@@ -437,5 +445,43 @@ mod tests {
     let hrefs = extract_hrefs(input);
     assert_eq!(hrefs.len(), 1);
     assert_eq!(hrefs[0].0, "mailto:test@example.com");
+  }
+
+  // Tests for entity-encoded HTML (Chrome sends this)
+
+  #[test]
+  fn test_strip_html_entity_encoded_anchor() {
+    // Chrome sends HTML like this with entity-encoded tags
+    let input = "&lt;a href=&quot;https://www.youtube.com/&quot; rel=&quot;noopener noreferrer&quot;&gt;www.youtube.com&lt;/a&gt;";
+    let output = strip_html(input);
+    assert_eq!(output, "www.youtube.com", "Should decode entities then strip tags");
+  }
+
+  #[test]
+  fn test_strip_html_entity_encoded_with_text() {
+    // Chrome notification body with entity-encoded anchor and text
+    let input = "&lt;a href=&quot;https://www.youtube.com/&quot;&gt;www.youtube.com&lt;/a&gt;Video Title Here";
+    let output = strip_html(input);
+    assert_eq!(output, "www.youtube.comVideo Title Here", "Should decode and strip, preserving text");
+  }
+
+  #[test]
+  fn test_extract_hrefs_entity_encoded() {
+    // Chrome sends HTML with entity-encoded attributes
+    let input = "&lt;a href=&quot;https://www.youtube.com/&quot; rel=&quot;noopener noreferrer&quot;&gt;www.youtube.com&lt;/a&gt;";
+    let hrefs = extract_hrefs(input);
+    assert_eq!(hrefs.len(), 1, "Should find entity-encoded anchor");
+    assert_eq!(hrefs[0].0, "https://www.youtube.com/");
+    assert_eq!(hrefs[0].1, "www.youtube.com");
+  }
+
+  #[test]
+  fn test_extract_hrefs_mixed_regular_and_encoded() {
+    // Mix of regular and entity-encoded anchors
+    let input = r#"<a href="https://a.com">A</a> and &lt;a href=&quot;https://b.com&quot;&gt;B&lt;/a&gt;"#;
+    let hrefs = extract_hrefs(input);
+    assert_eq!(hrefs.len(), 2, "Should find both regular and encoded anchors");
+    assert_eq!(hrefs[0].0, "https://a.com");
+    assert_eq!(hrefs[1].0, "https://b.com");
   }
 }

@@ -22,7 +22,8 @@
     flake-utils.lib.eachSystem supportedSystems (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        craneLib = crane.lib.${system}.overrideToolchain fenix.packages.${system}.stable.toolchain;
+        # Use latest Rust toolchain (required for Edition 2024)
+        craneLib = crane.lib.${system}.overrideToolchain fenix.packages.${system}.latest.toolchain;
         pkgDef = {
           src = nix-filter.lib.filter {
             root = ./.;

@@ -14,7 +14,7 @@ use std::time::Instant;
 /// ```
 /// let progress = notification_progress(0.75, true);
 /// ```
-pub fn notification_progress<'a, Message: 'a>(
+pub fn notification_progress<'a, Message: 'static>(
     value: f32,
     show_percentage: bool,
 ) -> Element<'a, Message> {
@@ -31,7 +31,7 @@ pub fn notification_progress<'a, Message: 'a>(
         row![
             bar,
             cosmic::widget::Space::with_width(8),
-            text::caption(&percentage),
+            text::caption(percentage),
         ]
         .align_y(Alignment::Center)
         .into()
@@ -50,7 +50,7 @@ pub fn notification_progress<'a, Message: 'a>(
 /// ```
 /// let progress = styled_progress(0.5, 6.0);
 /// ```
-pub fn styled_progress<'a, Message: 'a>(value: f32, height: f32) -> Element<'a, Message> {
+pub fn styled_progress<'a, Message: 'static>(value: f32, height: f32) -> Element<'a, Message> {
     let clamped_value = value.clamp(0.0, 1.0);
 
     progress_bar(0.0..=1.0, clamped_value)
@@ -140,7 +140,6 @@ impl AnimatedProgress {
   pub fn current_value(&self) -> f32 {
     let elapsed = self.start_time.elapsed().as_millis() as u64;
     if elapsed >= self.duration_ms {
-      self.current = self.target;
       return self.target;
     }
 
@@ -184,7 +183,7 @@ impl Default for AnimatedProgress {
 /// progress.set_target(0.75);
 /// let bar = animated_notification_progress(&mut progress, true);
 /// ```
-pub fn animated_notification_progress<'a, Message: 'a>(
+pub fn animated_notification_progress<'a, Message: 'static>(
   state: &AnimatedProgress,
   show_percentage: bool,
 ) -> Element<'a, Message> {

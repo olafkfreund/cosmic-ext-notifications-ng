@@ -85,8 +85,8 @@ pub struct RichCardData {
 /// │ [Reply] [Mark Read] [Open]              │ Actions (optional)
 /// └─────────────────────────────────────────┘
 /// ```
-pub fn rich_card<'a, Message: 'a + Clone>(
-    data: &RichCardData,
+pub fn rich_card<'a, Message: 'static + Clone>(
+    data: &'a RichCardData,
     config: &RichCardConfig,
     on_close: Message,
 ) -> Element<'a, Message> {
@@ -119,9 +119,9 @@ pub fn rich_card<'a, Message: 'a + Clone>(
 }
 
 /// Creates the header section with app icon, name, close button, and timestamp
-fn create_header<'a, Message: 'a + Clone>(
-    app_name: &str,
-    timestamp: Option<&str>,
+fn create_header<'a, Message: 'static + Clone>(
+    app_name: &'a str,
+    timestamp: Option<&'a str>,
     on_close: Message,
 ) -> Element<'a, Message> {
     // App icon placeholder (using a generic icon)
@@ -155,7 +155,7 @@ fn create_header<'a, Message: 'a + Clone>(
 }
 
 /// Creates the body section with image placeholder and notification content
-fn create_body<'a, Message: 'a>(summary: &str, body: &str) -> Element<'a, Message> {
+fn create_body<'a, Message: 'static>(summary: &'a str, body: &'a str) -> Element<'a, Message> {
     // Image placeholder (64x64)
     let image_placeholder = container(
         text::caption("IMG")
@@ -181,7 +181,7 @@ fn create_body<'a, Message: 'a>(summary: &str, body: &str) -> Element<'a, Messag
 }
 
 /// Creates a placeholder for the progress bar section
-fn create_progress_placeholder<'a, Message: 'a>(progress: Option<u8>) -> Element<'a, Message> {
+fn create_progress_placeholder<'a, Message: 'static>(progress: Option<u8>) -> Element<'a, Message> {
     let progress_text = if let Some(pct) = progress {
         format!("Progress: {}%", pct.min(100))
     } else {
@@ -196,7 +196,7 @@ fn create_progress_placeholder<'a, Message: 'a>(progress: Option<u8>) -> Element
 }
 
 /// Creates a placeholder for the actions section
-fn create_actions_placeholder<'a, Message: 'a>() -> Element<'a, Message> {
+fn create_actions_placeholder<'a, Message: 'static>() -> Element<'a, Message> {
     // Placeholder for action buttons - will be implemented in another task
     let action_text = text::caption("Actions: [Reply] [Mark Read] [Open]");
 

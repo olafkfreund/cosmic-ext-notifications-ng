@@ -9,8 +9,8 @@ pub struct LinkClicked(pub String);
 /// Create body text with clickable links
 /// For now, this creates plain text - full link clicking requires
 /// more complex widget composition that will be added during integration
-pub fn linkified_body<'a, Message: 'a>(
-  body: &str,
+pub fn linkified_body<'a, Message: 'static>(
+  body: &'a str,
   _links: &[NotificationLink],
 ) -> Element<'a, Message> {
   // For Phase 3, create basic text element

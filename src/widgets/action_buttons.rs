@@ -1,5 +1,6 @@
-use cosmic::iced::{Alignment, Length};
-use cosmic::widget::{button, row};
+use cosmic::iced::Alignment;
+use cosmic::iced_widget::row;
+use cosmic::widget::button;
 use cosmic::Element;
 use cosmic_notifications_util::{ActionId, NotificationAction};
 
@@ -13,10 +14,10 @@ pub enum ActionMessage {
 }
 
 /// Create a row of action buttons for a notification
-pub fn action_buttons_row<'a, Message: Clone + 'a>(
+pub fn action_buttons_row<'a, Message: Clone + 'static>(
   notification_id: u32,
-  actions: &[NotificationAction],
-  on_action: impl Fn(u32, String) -> Message + 'a + Clone,
+  actions: &'a [NotificationAction],
+  on_action: impl Fn(u32, String) -> Message + 'static + Clone,
 ) -> Element<'a, Message> {
   // Filter out default action and limit to MAX_VISIBLE_ACTIONS
   let visible_actions: Vec<_> = actions
@@ -29,34 +30,57 @@ pub fn action_buttons_row<'a, Message: Clone + 'a>(
     return cosmic::widget::Space::new(0, 0).into();
   }
 
-  let buttons: Vec<Element<'a, Message>> = visible_actions
-    .iter()
-    .map(|action| {
-      let action_id = action.id.clone();
-      let on_action = on_action.clone();
+  // Build buttons
+  let mut elements: Vec<Element<'a, Message>> = Vec::with_capacity(visible_actions.len());
 
-      button::text(&action.label)
-        .on_press((on_action)(notification_id, action_id))
-        .padding([6, 12])
+  for action in visible_actions {
+    let action_id = action.id.clone();
+    let label = action.label.clone();
+    let on_action = on_action.clone();
+
+    let btn: Element<'a, Message> = button::text(label)
+      .on_press((on_action)(notification_id, action_id))
+      .padding([6, 12])
+      .into();
+
+    elements.push(btn);
+  }
+
+  // Use row! macro with collected elements by folding
+  match elements.len() {
+    0 => cosmic::widget::Space::new(0, 0).into(),
+    1 => elements.into_iter().next().unwrap(),
+    2 => {
+      let mut iter = elements.into_iter();
+      row![iter.next().unwrap(), iter.next().unwrap()]
+        .spacing(8)
+        .align_y(Alignment::Center)
         .into()
-    })
-    .collect();
-
-  row(buttons)
-    .spacing(8)
-    .align_y(Alignment::Center)
-    .into()
+    }
+    _ => {
+      let mut iter = elements.into_iter();
+      row![
+        iter.next().unwrap(),
+        iter.next().unwrap(),
+        iter.next().unwrap()
+      ]
+      .spacing(8)
+      .align_y(Alignment::Center)
+      .into()
+    }
+  }
 }
 
 /// Create a single action button
-pub fn action_button<'a, Message: Clone + 'a>(
-  action: &NotificationAction,
+pub fn action_button<'a, Message: Clone + 'static>(
+  action: &'a NotificationAction,
   notification_id: u32,
-  on_action: impl Fn(u32, String) -> Message + 'a,
+  on_action: impl Fn(u32, String) -> Message + 'static,
 ) -> Element<'a, Message> {
   let action_id = action.id.clone();
+  let label = action.label.clone();
 
-  button::text(&action.label)
+  button::text(label)
     .on_press(on_action(notification_id, action_id))
     .padding([6, 12])
     .into()

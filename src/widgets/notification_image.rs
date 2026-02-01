@@ -34,13 +34,14 @@ pub fn notification_image<'a, Message: 'a>(
   }
 
   // Use cosmic's icon::from_raster_pixels for RGBA data
-  let icon_widget = icon::from_raster_pixels(image.width, image.height, image.data.clone())
-    .size(width)
-    .icon();
+  // The icon is wrapped in a container to constrain its size
+  let icon_widget = icon::from_raster_pixels(image.width, image.height, image.data.clone()).icon();
 
   container(icon_widget)
     .width(Length::Fixed(width as f32))
     .height(Length::Fixed(height as f32))
+    .center_x(Length::Fixed(width as f32))
+    .center_y(Length::Fixed(height as f32))
     .into()
 }
 

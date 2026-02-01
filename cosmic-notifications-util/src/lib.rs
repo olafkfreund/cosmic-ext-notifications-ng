@@ -30,7 +30,7 @@ pub use action_parser::{
 pub use link::NotificationLink;
 pub use link_detector::{detect_links, is_safe_url, open_link};
 pub use rich_content::RichContent;
-pub use sanitizer::{has_rich_content, sanitize_html, strip_html};
+pub use sanitizer::{extract_hrefs, has_rich_content, sanitize_html, strip_html};
 pub use urgency::NotificationUrgency;
 pub use urgency_style::{
     categories, category_icon, is_message_category, is_system_category, urgency_color,

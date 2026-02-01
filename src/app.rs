@@ -47,8 +47,8 @@ use cosmic::widget::{autosize, button, container, icon, text};
 use cosmic::{Application, Element, app::Task};
 use cosmic_notifications_config::NotificationsConfig;
 use cosmic_notifications_util::{
-    ActionId, CloseReason, Hint, Image, Notification, NotificationImage, ProcessedImage,
-    detect_links, sanitize_html,
+    ActionId, CloseReason, Hint, Image, Notification, NotificationImage, NotificationLink,
+    ProcessedImage, detect_links, extract_hrefs, sanitize_html, strip_html,
 };
 use cosmic_panel_config::{CosmicPanelConfig, CosmicPanelOuput, PanelAnchor};
 use cosmic_time::{Instant, Timeline, anim, id};
@@ -195,17 +195,37 @@ impl CosmicNotifications {
         let summary_text: String = n.summary.lines().next().unwrap_or_default().to_string();
         let body_text = n.body.clone();
 
-        // Sanitize HTML and detect links in body
-        let sanitized_body_str = sanitize_html(&body_text);
-        let links = detect_links(&sanitized_body_str);
+        // Extract URLs from href attributes in HTML anchor tags first
+        let href_links: Vec<NotificationLink> = extract_hrefs(&body_text)
+            .into_iter()
+            .map(|(url, _text)| NotificationLink {
+                url,
+                title: None,
+                start: 0,
+                length: 0,
+            })
+            .collect();
+
+        // Strip HTML for display and sanitize
+        let display_body_str = strip_html(&sanitize_html(&body_text));
+
+        // Detect plain text URLs in the stripped body
+        let plain_links = detect_links(&display_body_str);
+
+        // Combine href-extracted links with plain text links, preferring href links
+        let links: Vec<NotificationLink> = if !href_links.is_empty() {
+            href_links
+        } else {
+            plain_links
+        };
 
         // Create body text with clickable links if enabled
         let body_element: Element<'static, Message> = if config.enable_links && !links.is_empty() {
             // Build text with clickable link segments
-            self.render_body_with_links(&sanitized_body_str, &links)
+            self.render_body_with_links(&display_body_str, &links)
         } else {
             // Show first line only when no links
-            let body_display = sanitized_body_str.lines().next().unwrap_or_default().to_string();
+            let body_display = display_body_str.lines().next().unwrap_or_default().to_string();
             text::caption(body_display).width(Length::Fill).into()
         };
 

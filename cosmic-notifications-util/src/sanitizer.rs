@@ -64,6 +64,30 @@ pub fn strip_html(html: &str) -> String {
   decode_entities(&without_tags)
 }
 
+/// Extract URLs from href attributes in anchor tags.
+///
+/// This parses `<a href="...">` tags and extracts the URL from the href attribute.
+/// Returns a vector of (url, link_text) tuples.
+pub fn extract_hrefs(html: &str) -> Vec<(String, String)> {
+  let href_regex = regex::Regex::new(
+    r#"<a\s+[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([^<]*)</a>"#
+  ).unwrap();
+
+  href_regex
+    .captures_iter(html)
+    .filter_map(|cap| {
+      let url = cap.get(1)?.as_str().to_string();
+      let text = cap.get(2)?.as_str().to_string();
+      // Only include safe URLs
+      if url.starts_with("https://") || url.starts_with("http://") || url.starts_with("mailto:") {
+        Some((url, text))
+      } else {
+        None
+      }
+    })
+    .collect()
+}
+
 /// Decode common HTML entities to their character equivalents
 fn decode_entities(text: &str) -> String {
   text
@@ -361,5 +385,57 @@ mod tests {
     assert!(output.contains("Para 1"), "Should preserve text content");
     assert!(output.contains("Para 2"), "Should preserve text content");
     assert!(output.contains("bold"), "Should preserve text content");
+  }
+
+  // Tests for extract_hrefs
+
+  #[test]
+  fn test_extract_hrefs_simple() {
+    let input = r#"<a href="https://example.com">link text</a>"#;
+    let hrefs = extract_hrefs(input);
+    assert_eq!(hrefs.len(), 1);
+    assert_eq!(hrefs[0].0, "https://example.com");
+    assert_eq!(hrefs[0].1, "link text");
+  }
+
+  #[test]
+  fn test_extract_hrefs_with_rel_attribute() {
+    let input = r#"<a href="https://www.youtube.com/" rel="noopener noreferrer">www.youtube.com</a>"#;
+    let hrefs = extract_hrefs(input);
+    assert_eq!(hrefs.len(), 1);
+    assert_eq!(hrefs[0].0, "https://www.youtube.com/");
+    assert_eq!(hrefs[0].1, "www.youtube.com");
+  }
+
+  #[test]
+  fn test_extract_hrefs_multiple_links() {
+    let input = r#"<a href="https://a.com">A</a> and <a href="https://b.com">B</a>"#;
+    let hrefs = extract_hrefs(input);
+    assert_eq!(hrefs.len(), 2);
+    assert_eq!(hrefs[0].0, "https://a.com");
+    assert_eq!(hrefs[1].0, "https://b.com");
+  }
+
+  #[test]
+  fn test_extract_hrefs_filters_unsafe_urls() {
+    let input = r#"<a href="javascript:alert('xss')">bad</a> <a href="https://safe.com">good</a>"#;
+    let hrefs = extract_hrefs(input);
+    assert_eq!(hrefs.len(), 1);
+    assert_eq!(hrefs[0].0, "https://safe.com");
+  }
+
+  #[test]
+  fn test_extract_hrefs_no_links() {
+    let input = "Plain text without any links";
+    let hrefs = extract_hrefs(input);
+    assert!(hrefs.is_empty());
+  }
+
+  #[test]
+  fn test_extract_hrefs_mailto() {
+    let input = r#"<a href="mailto:test@example.com">email us</a>"#;
+    let hrefs = extract_hrefs(input);
+    assert_eq!(hrefs.len(), 1);
+    assert_eq!(hrefs[0].0, "mailto:test@example.com");
   }
 }

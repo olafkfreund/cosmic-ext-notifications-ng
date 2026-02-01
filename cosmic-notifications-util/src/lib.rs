@@ -94,10 +94,21 @@ impl Notification {
                 "y" => i32::try_from(v).map(Hint::Y).ok(),
                 "image-path" | "image_path" => String::try_from(v).ok().map(|s| {
                     Hint::Image(
+                        // First try parsing as file:// URL
                         url::Url::parse(&s)
                             .ok()
                             .and_then(|u| u.to_file_path().ok())
-                            .map_or(Image::Name(s), Image::File),
+                            .map(Image::File)
+                            // Then check if it's an absolute file path
+                            .or_else(|| {
+                                if s.starts_with('/') {
+                                    Some(Image::File(PathBuf::from(&s)))
+                                } else {
+                                    None
+                                }
+                            })
+                            // Otherwise treat as icon name
+                            .unwrap_or_else(|| Image::Name(s)),
                     )
                 }),
                 "image-data" | "image_data" | "icon_data" => match v {

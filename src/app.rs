@@ -171,19 +171,21 @@ impl CosmicNotifications {
 
         // Add notification image if present and enabled
         // Check hints first, then fall back to app_icon
+        // Use larger size (96x96) to better match text content
         if config.show_images {
             if let Some(image) = n.image() {
-                // Image from hints (image-data, image-path)
+                // Image from hints (image-data, image-path) - use Expanded size (128x128)
                 if let Some(img_elem) = self.render_notification_image(image) {
                     body_elements.push(img_elem);
                 }
             } else if !n.app_icon.is_empty() {
                 // Fallback to app_icon (from notify-send -i or app_icon parameter)
+                // Use larger 96x96 size to match text height
                 let icon_elem: Element<'static, Message> = container(
-                    icon::from_name(n.app_icon.as_str()).size(64).icon()
+                    icon::from_name(n.app_icon.as_str()).size(96).icon()
                 )
-                .width(Length::Fixed(64.0))
-                .height(Length::Fixed(64.0))
+                .width(Length::Fixed(96.0))
+                .height(Length::Fixed(96.0))
                 .into();
                 body_elements.push(icon_elem);
             }
@@ -294,6 +296,7 @@ impl CosmicNotifications {
     }
 
     /// Render notification image from Image hint
+    /// Uses Expanded size (128x128) for better visibility with text content
     fn render_notification_image(&self, image: &Image) -> Option<Element<'static, Message>> {
         match image {
             Image::Data { width, height, data } => {
@@ -303,12 +306,12 @@ impl CosmicNotifications {
                     width: *width,
                     height: *height,
                 };
-                Some(notification_image(&processed, ImageSize::Thumbnail))
+                Some(notification_image(&processed, ImageSize::Expanded))
             }
             Image::File(path) => {
                 // Try to load image from file
                 match NotificationImage::from_path(path.to_str().unwrap_or_default()) {
-                    Ok(processed) => Some(notification_image(&processed, ImageSize::Thumbnail)),
+                    Ok(processed) => Some(notification_image(&processed, ImageSize::Expanded)),
                     Err(e) => {
                         tracing::warn!("Failed to load notification image from {}: {}", path.display(), e);
                         None
@@ -316,11 +319,11 @@ impl CosmicNotifications {
                 }
             }
             Image::Name(name) => {
-                // Use icon from name
+                // Use icon from name - 96x96 to match text height
                 Some(
-                    container(icon::from_name(name.as_str()).size(64).icon())
-                        .width(Length::Fixed(64.0))
-                        .height(Length::Fixed(64.0))
+                    container(icon::from_name(name.as_str()).size(96).icon())
+                        .width(Length::Fixed(96.0))
+                        .height(Length::Fixed(96.0))
                         .into()
                 )
             }

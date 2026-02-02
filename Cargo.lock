@@ -1205,7 +1205,7 @@ dependencies = [
 
 [[package]]
 name = "cosmic-notifications"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "color-backtrace",
@@ -1228,7 +1228,7 @@ dependencies = [
 
 [[package]]
 name = "cosmic-notifications-config"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cosmic-config",
  "serde",
@@ -1237,7 +1237,7 @@ dependencies = [
 
 [[package]]
 name = "cosmic-notifications-util"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "ammonia",
  "fast_image_resize",

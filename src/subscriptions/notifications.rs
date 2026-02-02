@@ -227,6 +227,14 @@ impl Machine<Waiting> {
                             );
                         }
                     }
+                    Input::GetHistory { tx } => {
+                        // Forward the request to the main app via Event
+                        if let Err(err) = self.output.send(Event::GetHistory { tx }).await {
+                            tracing::error!(
+                                "Failed to send GetHistory event to subscription channel: {err}"
+                            );
+                        }
+                    }
                 }
             } else {
                 // The channel was closed, so we are done
@@ -236,7 +244,7 @@ impl Machine<Waiting> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Input {
     Activated {
         token: String,
@@ -253,15 +261,39 @@ pub enum Input {
     Closed(u32, CloseReason),
     Dismissed(u32),
     AppletConn(Connection),
+    GetHistory {
+        tx: tokio::sync::oneshot::Sender<Vec<Notification>>,
+    },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Event {
     Ready(Sender<Input>),
     Notification(Notification),
     Replace(Notification),
     CloseNotification(u32),
     AppletActivated { id: u32, action: ActionId },
+    GetHistory {
+        tx: tokio::sync::oneshot::Sender<Vec<Notification>>,
+    },
+}
+
+impl Clone for Event {
+    fn clone(&self) -> Self {
+        match self {
+            Event::Ready(tx) => Event::Ready(tx.clone()),
+            Event::Notification(n) => Event::Notification(n.clone()),
+            Event::Replace(n) => Event::Replace(n.clone()),
+            Event::CloseNotification(id) => Event::CloseNotification(*id),
+            Event::AppletActivated { id, action } => Event::AppletActivated {
+                id: *id,
+                action: action.clone()
+            },
+            Event::GetHistory { .. } => {
+                panic!("GetHistory event cannot be cloned - it contains a oneshot sender")
+            }
+        }
+    }
 }
 
 pub fn notifications() -> Subscription<Event> {

@@ -157,4 +157,44 @@ impl NotificationsApplet {
         }
         Ok(())
     }
+
+    pub async fn get_history(&self) -> zbus::fdo::Result<Vec<(u32, String, String, String, String, i64)>> {
+        tracing::trace!("Received get_history request from applet");
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        let res = self.tx.send(Input::GetHistory { tx }).await;
+        if let Err(err) = res {
+            tracing::error!("Failed to send get_history message to channel");
+            return Err(zbus::fdo::Error::Failed(err.to_string()));
+        }
+
+        // Wait for response with timeout
+        let notifications = match tokio::time::timeout(
+            tokio::time::Duration::from_secs(2),
+            rx
+        ).await {
+            Ok(Ok(notifs)) => notifs,
+            Ok(Err(err)) => {
+                tracing::error!("Failed to receive history: {}", err);
+                return Err(zbus::fdo::Error::Failed("Channel closed".to_string()));
+            }
+            Err(_) => {
+                tracing::error!("Timeout waiting for history");
+                return Err(zbus::fdo::Error::Failed("Timeout".to_string()));
+            }
+        };
+
+        // Convert notifications to a D-Bus compatible format
+        // Return (id, app_name, summary, body, app_icon, timestamp_secs)
+        let result: Vec<_> = notifications.into_iter().map(|n| {
+            let timestamp = n.time
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            (n.id, n.app_name, n.summary, n.body, n.app_icon, timestamp)
+        }).collect();
+
+        Ok(result)
+    }
 }

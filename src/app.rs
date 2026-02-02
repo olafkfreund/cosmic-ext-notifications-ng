@@ -195,8 +195,14 @@ impl CosmicNotifications {
         let summary_text: String = n.summary.lines().next().unwrap_or_default().to_string();
         let body_text = n.body.clone();
 
+        // Debug: Log raw body for troubleshooting Chrome notifications
+        tracing::debug!("Notification body (raw): {:?}", body_text);
+
         // Extract URLs from href attributes in HTML anchor tags first
-        let href_links: Vec<NotificationLink> = extract_hrefs(&body_text)
+        let extracted = extract_hrefs(&body_text);
+        tracing::debug!("Extracted hrefs: {:?}", extracted);
+
+        let href_links: Vec<NotificationLink> = extracted
             .into_iter()
             .map(|(url, _text)| NotificationLink {
                 url,
@@ -908,6 +914,13 @@ impl cosmic::Application for CosmicNotifications {
                 notifications::Event::AppletActivated { id, action } => {
                     tracing::trace!("requesting token for {id}");
                     return self.request_activation(id, Some(action));
+                }
+                notifications::Event::GetHistory { tx } => {
+                    // Send the hidden notifications history
+                    let history: Vec<_> = self.hidden.iter().cloned().collect();
+                    if let Err(err) = tx.send(history) {
+                        tracing::error!("Failed to send history response: {:?}", err);
+                    }
                 }
             },
             Message::Dismissed(id) => {

@@ -106,6 +106,8 @@ fn decode_entities(text: &str) -> String {
     .replace("&#x27;", "'")
     .replace("&#47;", "/")
     .replace("&#32;", " ")
+    .replace("&#58;", ":") // Colon (decimal) - Chrome uses this in URLs
+    .replace("&#x3A;", ":") // Colon (hex)
     .replace("&#61;", "=")
     .replace("&amp;", "&") // Must be last to avoid double-decoding
 }
@@ -483,5 +485,31 @@ mod tests {
     assert_eq!(hrefs.len(), 2, "Should find both regular and encoded anchors");
     assert_eq!(hrefs[0].0, "https://a.com");
     assert_eq!(hrefs[1].0, "https://b.com");
+  }
+
+  #[test]
+  fn test_extract_hrefs_with_numeric_colon_entities() {
+    // Chrome may encode colons as &#58; (decimal) or &#x3A; (hex)
+    let input_decimal = "&lt;a href=&quot;https&#58;//www.youtube.com/&quot;&gt;www.youtube.com&lt;/a&gt;";
+    let hrefs_decimal = extract_hrefs(input_decimal);
+    assert_eq!(hrefs_decimal.len(), 1, "Should find anchor with decimal colon entity");
+    assert_eq!(hrefs_decimal[0].0, "https://www.youtube.com/", "Should decode &#58; to :");
+
+    let input_hex = "&lt;a href=&quot;https&#x3A;//www.youtube.com/&quot;&gt;www.youtube.com&lt;/a&gt;";
+    let hrefs_hex = extract_hrefs(input_hex);
+    assert_eq!(hrefs_hex.len(), 1, "Should find anchor with hex colon entity");
+    assert_eq!(hrefs_hex[0].0, "https://www.youtube.com/", "Should decode &#x3A; to :");
+  }
+
+  #[test]
+  fn test_decode_entities_colons() {
+    // Test that colons are properly decoded from numeric entities
+    assert_eq!(decode_entities("&#58;"), ":", "Should decode decimal colon");
+    assert_eq!(decode_entities("&#x3A;"), ":", "Should decode hex colon");
+    assert_eq!(
+      decode_entities("https&#58;//example.com"),
+      "https://example.com",
+      "Should decode colons in URLs"
+    );
   }
 }

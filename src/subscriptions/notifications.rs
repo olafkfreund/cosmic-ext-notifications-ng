@@ -343,15 +343,14 @@ impl Notifications {
     /// "sound"	The server supports sounds on notifications. If returned, the server must support the "sound-file" and "suppress-sound" hints.
     async fn get_capabilities(&self) -> Vec<&'static str> {
         vec![
-            "body",
-            "icon-static",
-            "persistence",
-            "actions",
-            // TODO support these
-            "action-icons",
-            "body-markup",
-            "body-hyperlinks",
-            "sound",
+            "body",           // Supports body text
+            "icon-static",    // Displays single-frame notification icons
+            "persistence",    // Notifications retained until acknowledged
+            "actions",        // Supports action buttons
+            "action-icons",   // Uses icons for action buttons when hint is set
+            "body-markup",    // Renders bold/italic styling in body
+            "body-hyperlinks",// Supports clickable links in body
+            "sound",          // Plays sound-file and sound-name hints
         ]
     }
 

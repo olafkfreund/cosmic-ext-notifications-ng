@@ -13,10 +13,16 @@ pub mod animated_image;
 #[cfg(feature = "image")]
 pub use animated_image::{AnimatedImage, AnimationFrame, MAX_FRAMES, MAX_ANIMATION_DURATION};
 
+#[cfg(feature = "audio")]
+pub mod audio;
+#[cfg(feature = "audio")]
+pub use audio::{play_sound_file, play_sound_name, AudioError};
+
 pub mod action;
 pub mod action_parser;
 pub mod link;
 pub mod link_detector;
+pub mod markup_parser;
 pub mod rich_content;
 pub mod sanitizer;
 pub mod urgency;
@@ -29,6 +35,7 @@ pub use action_parser::{
 };
 pub use link::NotificationLink;
 pub use link_detector::{detect_links, is_safe_url, open_link};
+pub use markup_parser::{parse_markup, segments_to_plain_text, StyledSegment, TextStyle};
 pub use rich_content::RichContent;
 pub use sanitizer::{extract_hrefs, has_rich_content, sanitize_html, strip_html};
 pub use urgency::NotificationUrgency;
@@ -153,6 +160,61 @@ impl Notification {
 
     pub fn transient(&self) -> bool {
         self.hints.iter().any(|h| *h == Hint::Transient(true))
+    }
+
+    /// Check if action buttons should display icons instead of text labels
+    pub fn action_icons(&self) -> bool {
+        self.hints.iter().any(|h| *h == Hint::ActionIcons(true))
+    }
+
+    /// Check if sound should be suppressed for this notification
+    pub fn suppress_sound(&self) -> bool {
+        self.hints.iter().any(|h| *h == Hint::SuppressSound(true))
+    }
+
+    /// Get the sound file path hint if present
+    pub fn sound_file(&self) -> Option<&std::path::Path> {
+        self.hints.iter().find_map(|h| match h {
+            Hint::SoundFile(path) => Some(path.as_path()),
+            _ => None,
+        })
+    }
+
+    /// Get the sound name hint if present (XDG sound theme name)
+    pub fn sound_name(&self) -> Option<&str> {
+        self.hints.iter().find_map(|h| match h {
+            Hint::SoundName(name) => Some(name.as_str()),
+            _ => None,
+        })
+    }
+
+    /// Play the notification sound if configured
+    ///
+    /// Respects suppress-sound hint, and plays sound-file or sound-name if specified.
+    #[cfg(feature = "audio")]
+    pub fn play_sound(&self) {
+        // Don't play if sound is suppressed
+        if self.suppress_sound() {
+            tracing::debug!("Sound suppressed for notification {}", self.id);
+            return;
+        }
+
+        // Try sound-file first (takes precedence)
+        if let Some(path) = self.sound_file() {
+            tracing::debug!("Playing sound file: {:?}", path);
+            if let Err(e) = crate::audio::play_sound_file(path) {
+                tracing::warn!("Failed to play sound file {:?}: {}", path, e);
+            }
+            return;
+        }
+
+        // Try sound-name (XDG sound theme)
+        if let Some(name) = self.sound_name() {
+            tracing::debug!("Playing sound name: {}", name);
+            if let Err(e) = crate::audio::play_sound_name(name) {
+                tracing::warn!("Failed to play sound '{}': {}", name, e);
+            }
+        }
     }
 
     pub fn category(&self) -> Option<&str> {

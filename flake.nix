@@ -51,6 +51,8 @@
             desktop-file-utils
             stdenv.cc.cc.lib
             desktop-file-utils
+            # Audio support for notification sounds
+            alsa-lib
            ];
           runtimeDependencies = with pkgs; [
             wayland

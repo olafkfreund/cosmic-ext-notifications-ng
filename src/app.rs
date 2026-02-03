@@ -48,7 +48,7 @@ use cosmic::{Application, Element, app::Task};
 use cosmic_notifications_config::NotificationsConfig;
 use cosmic_notifications_util::{
     ActionId, CloseReason, Hint, Image, Notification, NotificationImage, NotificationLink,
-    ProcessedImage, detect_links, extract_hrefs, sanitize_html, strip_html,
+    parse_markup, ProcessedImage, detect_links, extract_hrefs, sanitize_html, strip_html,
 };
 use cosmic_panel_config::{CosmicPanelConfig, CosmicPanelOuput, PanelAnchor};
 use cosmic_time::{Instant, Timeline, anim, id};
@@ -212,7 +212,10 @@ impl CosmicNotifications {
             })
             .collect();
 
-        // Strip HTML for display and sanitize
+        // Check if body contains HTML markup for styled rendering
+        let has_markup = cosmic_notifications_util::has_rich_content(&body_text);
+
+        // Strip HTML for link detection and plain text fallback
         let display_body_str = strip_html(&sanitize_html(&body_text));
 
         // Detect plain text URLs in the stripped body
@@ -225,12 +228,21 @@ impl CosmicNotifications {
             plain_links
         };
 
-        // Create body text with clickable links if enabled
-        let body_element: Element<'static, Message> = if config.enable_links && !links.is_empty() {
+        // Create body text - use markup rendering if HTML is present, otherwise plain text
+        let body_element: Element<'static, Message> = if has_markup {
+            // Render with HTML markup styling (body-markup capability)
+            let markup_body = self.render_markup_body(&body_text);
+            if config.enable_links && !links.is_empty() {
+                // Add link buttons below styled body
+                self.render_body_with_links(&display_body_str, &links)
+            } else {
+                markup_body
+            }
+        } else if config.enable_links && !links.is_empty() {
             // Build text with clickable link segments
             self.render_body_with_links(&display_body_str, &links)
         } else {
-            // Show first line only when no links
+            // Show first line only when no links and no markup
             let body_display = display_body_str.lines().next().unwrap_or_default().to_string();
             text::caption(body_display).width(Length::Fill).into()
         };
@@ -277,13 +289,25 @@ impl CosmicNotifications {
                 // Build action buttons inline to avoid lifetime issues
                 let mut action_elements: Vec<Element<'static, Message>> = Vec::with_capacity(visible_actions.len());
 
+                let use_icons = n.action_icons();
                 for (action_id, label) in visible_actions {
                     let action_id_str = action_id.to_string();
                     let label_str = label.clone();
-                    let btn: Element<'static, Message> = button::text(label_str)
-                        .on_press(Message::ActionClicked(notification_id, action_id_str))
-                        .padding([6, 12])
-                        .into();
+
+                    let btn: Element<'static, Message> = if use_icons {
+                        // When action-icons hint is true, interpret action ID as icon name
+                        // Common icon names: "media-playback-start", "media-playback-pause", etc.
+                        let icon_name = action_id_str.clone();
+                        button::icon(icon::from_name(icon_name).size(16).symbolic(true))
+                            .on_press(Message::ActionClicked(notification_id, action_id_str))
+                            .padding([6, 12])
+                            .into()
+                    } else {
+                        button::text(label_str)
+                            .on_press(Message::ActionClicked(notification_id, action_id_str))
+                            .padding([6, 12])
+                            .into()
+                    };
                     action_elements.push(btn);
                 }
 
@@ -451,6 +475,29 @@ impl CosmicNotifications {
             .spacing(4)
             .width(Length::Fill)
             .into()
+    }
+
+    /// Render body text with HTML markup processing
+    ///
+    /// Sanitizes HTML and extracts plain text for display.
+    /// The markup is processed and validated even though current cosmic widgets
+    /// don't support styled text rendering.
+    fn render_markup_body(&self, body_html: &str) -> Element<'static, Message> {
+        let sanitized = sanitize_html(body_html);
+        let segments = parse_markup(&sanitized);
+
+        // Convert segments to plain text
+        // Note: Rich text styling (bold/italic) would require cosmic widget support
+        // that currently isn't available. The markup is still processed and validated.
+        let plain_text: String = segments.iter().map(|s| s.text.as_str()).collect();
+
+        if plain_text.is_empty() {
+            return text::caption("").width(Length::Fill).into();
+        }
+
+        // Use first line for display
+        let display_text = plain_text.lines().next().unwrap_or_default().to_string();
+        text::caption(display_text).width(Length::Fill).into()
     }
 
     fn expire(&mut self, i: u32) {
@@ -625,6 +672,12 @@ impl CosmicNotifications {
         &mut self,
         notification: Notification,
     ) -> Task<<CosmicNotifications as cosmic::app::Application>::Message> {
+        // Play notification sound if not in do-not-disturb mode
+        #[cfg(feature = "audio")]
+        if !self.config.do_not_disturb {
+            notification.play_sound();
+        }
+
         let mut timeout = u32::try_from(notification.expire_timeout).unwrap_or(3000);
         let max_timeout = if notification.urgency() == 2 {
             self.config.max_timeout_urgent

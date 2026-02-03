@@ -180,6 +180,75 @@ Special handling:
 | Normal | 1 | Blue accent (default) |
 | Critical | 2 | Red accent, may bypass DND |
 
+## Transient Notifications
+
+### Overview
+
+Transient notifications are temporary notifications that are displayed on screen but **not persisted to the notification history**. This behavior is defined by the [FreeDesktop Desktop Notifications Specification](https://specifications.freedesktop.org/notification-spec/latest/) and is intentional, not a bug.
+
+### How It Works
+
+When an application sends a notification with `transient=true` in the hints:
+
+1. **Displayed normally** - The notification appears on screen like any other
+2. **Not sent to applet** - The notification applet is not notified of its arrival
+3. **Not in history** - The notification does not appear in the notification history panel
+4. **Ephemeral by design** - Once dismissed or timed out, it's gone
+
+### Applications Using Transient Hints
+
+Several applications use transient notifications for temporary, non-essential alerts:
+
+| Application | Typical Use Case |
+|-------------|------------------|
+| **Google Chrome / Chromium** | Web notifications, tab alerts |
+| **Firefox** | Web notifications |
+| **Media players** | Track change notifications |
+| **Volume/brightness OSD** | Momentary feedback indicators |
+
+### Why Chrome Notifications Don't Appear in History
+
+Google Chrome sends web notifications with the `transient=true` hint. This is Chrome's deliberate choice to:
+
+- Avoid cluttering the system notification history with ephemeral web content
+- Respect user privacy (web notifications may contain sensitive content)
+- Follow the notification spec's guidance for temporary alerts
+
+**This is expected behavior.** If you need Chrome notifications in history, this would require Chrome to change its notification sending behavior, not a change to this daemon.
+
+### Technical Details
+
+The transient check occurs in `src/subscriptions/notifications.rs`:
+
+```rust
+if !n.transient() {
+    // Only notify applet about non-transient notifications
+    NotificationsApplet::notify(...);
+}
+```
+
+This ensures:
+- Transient notifications are shown to the user immediately
+- The notification applet only tracks persistent notifications
+- System resources aren't used storing temporary alerts
+
+### Sending Transient Notifications
+
+To send a transient notification via D-Bus:
+
+```bash
+gdbus call --session \
+  --dest org.freedesktop.Notifications \
+  --object-path /org/freedesktop/Notifications \
+  --method org.freedesktop.Notifications.Notify \
+  "app-name" 0 "dialog-information" "Summary" "Body text" \
+  '[]' '{"transient": <true>}' 5000
+```
+
+### Checking if a Notification is Transient
+
+Applications can determine if a notification was marked transient by examining the hints dictionary in the `Notify` method call for the key `transient` with a boolean `true` value.
+
 ## Categories
 
 The [freedesktop notification categories](https://specifications.freedesktop.org/notification-spec/latest/categories.html) help determine appropriate icons and handling.

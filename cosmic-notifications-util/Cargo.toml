@@ -6,9 +6,10 @@ rust-version = "1.85"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["zbus_notifications"]
+default = ["zbus_notifications", "audio"]
 zbus_notifications = ["image", "zbus"]
 image = ["dep:image", "fast_image_resize"]
+audio = ["dep:rodio"]
 
 [dependencies]
 libcosmic = { git = "https://github.com/pop-os/libcosmic", default-features = false }
@@ -22,6 +23,7 @@ ammonia = "4"
 regex = "1"
 linkify = "0.10"
 open = "5"
+rodio = { version = "0.20", optional = true, default-features = false, features = ["symphonia-all"] }
 
 [dev-dependencies]
 serde_json = "1.0"

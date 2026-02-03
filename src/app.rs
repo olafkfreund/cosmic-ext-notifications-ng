@@ -258,11 +258,16 @@ impl CosmicNotifications {
         let body_section: Element<'static, Message> = if body_elements.is_empty() {
             body_content
         } else {
-            let img = body_elements.pop().unwrap();
-            row![img, body_content]
-                .spacing(12)
-                .align_y(Alignment::Start)
-                .into()
+            match body_elements.pop() {
+                Some(img) => row![img, body_content]
+                    .spacing(12)
+                    .align_y(Alignment::Start)
+                    .into(),
+                None => {
+                    tracing::warn!("Expected image element but vector was empty");
+                    body_content
+                }
+            }
         };
 
         // Build card content
@@ -314,24 +319,41 @@ impl CosmicNotifications {
                 // Build the row based on number of buttons
                 let action_row: Element<'static, Message> = match action_elements.len() {
                     0 => cosmic::widget::Space::new(0, 0).into(),
-                    1 => action_elements.into_iter().next().unwrap(),
+                    1 => {
+                        let mut iter = action_elements.into_iter();
+                        match iter.next() {
+                            Some(btn) => btn,
+                            None => {
+                                tracing::warn!("Expected 1 action button but iterator was empty");
+                                cosmic::widget::Space::new(0, 0).into()
+                            }
+                        }
+                    }
                     2 => {
                         let mut iter = action_elements.into_iter();
-                        row![iter.next().unwrap(), iter.next().unwrap()]
-                            .spacing(8)
-                            .align_y(Alignment::Center)
-                            .into()
+                        match (iter.next(), iter.next()) {
+                            (Some(btn1), Some(btn2)) => row![btn1, btn2]
+                                .spacing(8)
+                                .align_y(Alignment::Center)
+                                .into(),
+                            _ => {
+                                tracing::warn!("Expected 2 action buttons but not all were available");
+                                cosmic::widget::Space::new(0, 0).into()
+                            }
+                        }
                     }
                     _ => {
                         let mut iter = action_elements.into_iter();
-                        row![
-                            iter.next().unwrap(),
-                            iter.next().unwrap(),
-                            iter.next().unwrap()
-                        ]
-                        .spacing(8)
-                        .align_y(Alignment::Center)
-                        .into()
+                        match (iter.next(), iter.next(), iter.next()) {
+                            (Some(btn1), Some(btn2), Some(btn3)) => row![btn1, btn2, btn3]
+                                .spacing(8)
+                                .align_y(Alignment::Center)
+                                .into(),
+                            _ => {
+                                tracing::warn!("Expected 3 action buttons but not all were available");
+                                cosmic::widget::Space::new(0, 0).into()
+                            }
+                        }
                     }
                 };
                 card_content = card_content.push(action_row);
@@ -452,22 +474,39 @@ impl CosmicNotifications {
 
         // Build row of link buttons
         let links_row: Element<'static, Message> = match link_elements.len() {
-            1 => link_elements.into_iter().next().unwrap(),
+            1 => {
+                let mut iter = link_elements.into_iter();
+                match iter.next() {
+                    Some(btn) => btn,
+                    None => {
+                        tracing::warn!("Expected 1 link button but iterator was empty");
+                        cosmic::widget::Space::new(0, 0).into()
+                    }
+                }
+            }
             2 => {
                 let mut iter = link_elements.into_iter();
-                column![iter.next().unwrap(), iter.next().unwrap()]
-                    .spacing(2)
-                    .into()
+                match (iter.next(), iter.next()) {
+                    (Some(btn1), Some(btn2)) => column![btn1, btn2]
+                        .spacing(2)
+                        .into(),
+                    _ => {
+                        tracing::warn!("Expected 2 link buttons but not all were available");
+                        cosmic::widget::Space::new(0, 0).into()
+                    }
+                }
             }
             _ => {
                 let mut iter = link_elements.into_iter();
-                column![
-                    iter.next().unwrap(),
-                    iter.next().unwrap(),
-                    iter.next().unwrap()
-                ]
-                .spacing(2)
-                .into()
+                match (iter.next(), iter.next(), iter.next()) {
+                    (Some(btn1), Some(btn2), Some(btn3)) => column![btn1, btn2, btn3]
+                        .spacing(2)
+                        .into(),
+                    _ => {
+                        tracing::warn!("Expected 3 link buttons but not all were available");
+                        cosmic::widget::Space::new(0, 0).into()
+                    }
+                }
             }
         };
 
@@ -509,7 +548,15 @@ impl CosmicNotifications {
         self.sort_notifications();
         self.group_notifications();
         self.hidden.push_front(notification);
-        self.hidden.truncate(200);
+
+        // Truncate by memory budget instead of fixed count
+        // 50MB budget allows ~500 text notifications or ~50 image notifications
+        const MAX_HIDDEN_MEMORY: usize = 50 * 1024 * 1024;
+        let mut total_size = 0;
+        self.hidden.retain(|n| {
+            total_size += n.estimated_size();
+            total_size < MAX_HIDDEN_MEMORY
+        });
     }
 
     fn close(&mut self, i: u32, reason: CloseReason) -> Option<Task<Message>> {

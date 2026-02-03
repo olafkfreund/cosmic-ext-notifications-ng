@@ -266,6 +266,39 @@ impl Notification {
     pub fn duration_since(&self) -> Option<std::time::Duration> {
         SystemTime::now().duration_since(self.time).ok()
     }
+
+    /// Estimate memory usage of this notification in bytes
+    ///
+    /// This includes all string data, actions, and image data if present.
+    /// Used for memory budget tracking of hidden notifications.
+    pub fn estimated_size(&self) -> usize {
+        let mut size = 0;
+
+        // String data
+        size += self.app_name.len();
+        size += self.app_icon.len();
+        size += self.summary.len();
+        size += self.body.len();
+
+        // Actions
+        for (action_id, label) in &self.actions {
+            size += action_id.to_string().len();
+            size += label.len();
+        }
+
+        // Image data (largest contributor)
+        if let Some(Image::Data { data, .. }) = self.image() {
+            size += data.len();
+        }
+
+        // Hints overhead (approximate)
+        size += self.hints.len() * 32;
+
+        // Struct overhead
+        size += 200;
+
+        size
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

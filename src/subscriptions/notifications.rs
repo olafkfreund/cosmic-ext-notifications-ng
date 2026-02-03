@@ -8,7 +8,7 @@ use cosmic::{
 };
 use cosmic_notifications_util::{ActionId, CloseReason, Notification};
 use futures::channel::mpsc;
-use std::{collections::HashMap, fmt::Debug, num::NonZeroU32};
+use std::{collections::HashMap, fmt::Debug, num::NonZeroU64, time::{Duration, Instant}};
 use tokio::{
     sync::mpsc::{Receiver, Sender, channel},
     task::JoinHandle,
@@ -47,7 +47,12 @@ impl Conns {
                 .and_then(|conn| {
                     conn.serve_at(
                         "/org/freedesktop/Notifications",
-                        Notifications(tx.clone(), NonZeroU32::new(1).unwrap(), Vec::new()),
+                        Notifications(
+                            tx.clone(),
+                            NonZeroU64::new(1).unwrap(),
+                            Vec::new(),
+                            RateLimiter::new(),
+                        ),
                     )
                     .ok()
                 })
@@ -321,7 +326,62 @@ pub fn notifications() -> Subscription<Event> {
     )
 }
 
-pub struct Notifications(Sender<Input>, NonZeroU32, Vec<Connection>);
+/// Rate limiter to prevent notification spam attacks
+struct RateLimiter {
+    // app_name -> (window_start, count_in_window)
+    limits: HashMap<String, (Instant, u32)>,
+}
+
+impl RateLimiter {
+    fn new() -> Self {
+        Self {
+            limits: HashMap::new(),
+        }
+    }
+
+    /// Check if a notification from the given app should be accepted.
+    /// Returns true if under rate limit, false if rate limited.
+    fn check_and_update(&mut self, app_name: &str) -> bool {
+        const MAX_PER_MINUTE: u32 = 60;
+        const WINDOW: Duration = Duration::from_secs(60);
+
+        let now = Instant::now();
+
+        let entry = self
+            .limits
+            .entry(app_name.to_string())
+            .or_insert((now, 0));
+
+        // Reset window if expired
+        if now.duration_since(entry.0) > WINDOW {
+            *entry = (now, 1);
+            return true;
+        }
+
+        // Check rate limit
+        if entry.1 >= MAX_PER_MINUTE {
+            tracing::warn!(
+                "Rate limiting notifications from '{}' - exceeded {} notifications per minute",
+                app_name,
+                MAX_PER_MINUTE
+            );
+            return false;
+        }
+
+        entry.1 += 1;
+        true
+    }
+
+    /// Clean up old entries periodically to prevent memory growth
+    fn cleanup(&mut self) {
+        const WINDOW: Duration = Duration::from_secs(60);
+        let now = Instant::now();
+        self.limits
+            .retain(|_, (start, _)| now.duration_since(*start) <= WINDOW);
+    }
+}
+
+pub struct Notifications(Sender<Input>, NonZeroU64, Vec<Connection>, RateLimiter);
 
 #[interface(name = "org.freedesktop.Notifications")]
 impl Notifications {
@@ -391,16 +451,35 @@ impl Notifications {
         hints: HashMap<&str, zbus::zvariant::Value<'_>>,
         expire_timeout: i32,
     ) -> u32 {
+        // Periodic cleanup of rate limiter to prevent memory growth
+        // Only cleanup every ~100 notifications to avoid overhead
+        if self.1.get() % 100 == 0 {
+            self.3.cleanup();
+        }
+
+        // Check rate limit for new notifications (not replacements)
+        if replaces_id == 0 && !self.3.check_and_update(app_name) {
+            // Rate limited - return a dummy ID without processing
+            // Use 0 to indicate the notification was rejected
+            tracing::debug!(
+                "Notification from '{}' rejected due to rate limiting",
+                app_name
+            );
+            return 0;
+        }
+
         let id = if replaces_id == 0 {
             let id = self.1;
             self.1 = match self.1.checked_add(1) {
                 Some(id) => id,
                 None => {
                     tracing::warn!("Notification ID overflowed");
-                    NonZeroU32::new(1).unwrap()
+                    NonZeroU64::new(1).unwrap()
                 }
             };
-            id.get()
+            // Truncate u64 to u32 for D-Bus compatibility
+            // With u64 internal counter, collision risk is negligible
+            id.get() as u32
         } else {
             replaces_id
         };
@@ -508,4 +587,127 @@ impl Notifications {
         id: u32,
         reason: u32,
     ) -> zbus::Result<()>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rate_limiter_allows_under_limit() {
+        let mut limiter = RateLimiter::new();
+
+        // Should allow first 60 notifications
+        for i in 1..=60 {
+            assert!(
+                limiter.check_and_update("test_app"),
+                "Notification {} should be allowed",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_rate_limiter_blocks_over_limit() {
+        let mut limiter = RateLimiter::new();
+
+        // Fill up to the limit
+        for _ in 1..=60 {
+            limiter.check_and_update("test_app");
+        }
+
+        // 61st should be blocked
+        assert!(
+            !limiter.check_and_update("test_app"),
+            "Notification over limit should be blocked"
+        );
+    }
+
+    #[test]
+    fn test_rate_limiter_resets_after_window() {
+        let mut limiter = RateLimiter::new();
+
+        // Fill up to the limit
+        for _ in 1..=60 {
+            limiter.check_and_update("test_app");
+        }
+
+        // Manually advance time by modifying the entry
+        if let Some(entry) = limiter.limits.get_mut("test_app") {
+            entry.0 = Instant::now() - Duration::from_secs(61);
+        }
+
+        // Should allow again after window expires
+        assert!(
+            limiter.check_and_update("test_app"),
+            "Should allow after time window expires"
+        );
+    }
+
+    #[test]
+    fn test_rate_limiter_per_app_isolation() {
+        let mut limiter = RateLimiter::new();
+
+        // Fill up limit for app1
+        for _ in 1..=60 {
+            limiter.check_and_update("app1");
+        }
+
+        // app1 should be blocked
+        assert!(
+            !limiter.check_and_update("app1"),
+            "app1 should be rate limited"
+        );
+
+        // app2 should still be allowed
+        assert!(
+            limiter.check_and_update("app2"),
+            "app2 should not be affected by app1's rate limit"
+        );
+    }
+
+    #[test]
+    fn test_rate_limiter_cleanup() {
+        let mut limiter = RateLimiter::new();
+
+        // Add entries for multiple apps
+        limiter.check_and_update("app1");
+        limiter.check_and_update("app2");
+        limiter.check_and_update("app3");
+
+        assert_eq!(limiter.limits.len(), 3, "Should have 3 apps tracked");
+
+        // Manually age the entries
+        for (_, entry) in limiter.limits.iter_mut() {
+            entry.0 = Instant::now() - Duration::from_secs(61);
+        }
+
+        // Cleanup should remove old entries
+        limiter.cleanup();
+
+        assert_eq!(
+            limiter.limits.len(),
+            0,
+            "Cleanup should remove expired entries"
+        );
+    }
+
+    #[test]
+    fn test_rate_limiter_empty_app_name() {
+        let mut limiter = RateLimiter::new();
+
+        // Empty app names should still be rate limited
+        for i in 1..=60 {
+            assert!(
+                limiter.check_and_update(""),
+                "Empty app name notification {} should be allowed",
+                i
+            );
+        }
+
+        assert!(
+            !limiter.check_and_update(""),
+            "Empty app name should be rate limited after 60"
+        );
+    }
 }

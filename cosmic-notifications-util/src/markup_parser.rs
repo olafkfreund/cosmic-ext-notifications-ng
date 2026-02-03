@@ -2,8 +2,9 @@
 //!
 //! Parses sanitized HTML into styled text segments that can be rendered
 //! with rich text widgets.
-
-use regex::Regex;
+//!
+//! SECURITY: This parser expects input to be pre-sanitized with ammonia.
+//! It uses a state-machine approach instead of regex for safer parsing.
 
 /// Style flags for text segments
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -54,87 +55,92 @@ impl StyledSegment {
 ///
 /// Supports: <b>, <i>, <u>, <a href="...">
 /// Nested tags are supported (e.g., <b><i>bold italic</i></b>)
+///
+/// SECURITY: Input must be pre-sanitized with ammonia to remove dangerous content.
+/// This parser validates URLs and uses case-insensitive tag matching.
 pub fn parse_markup(html: &str) -> Vec<StyledSegment> {
     let mut segments = Vec::new();
     let mut current_style = TextStyle::default();
     let mut current_link: Option<String> = None;
-    let mut style_stack: Vec<(&str, TextStyle, Option<String>)> = Vec::new();
+    let mut style_stack: Vec<(String, TextStyle, Option<String>)> = Vec::new();
 
-    // Regex patterns for tag matching
-    let tag_pattern = Regex::new(r"<(/?)(\w+)(?:\s+[^>]*)?>").unwrap();
-    let href_pattern = Regex::new(r#"href=["']([^"']+)["']"#).unwrap();
+    let mut chars = html.chars().peekable();
+    let mut current_text = String::new();
 
-    let mut last_end = 0;
-
-    for cap in tag_pattern.captures_iter(html) {
-        let full_match = cap.get(0).unwrap();
-        let is_closing = &cap[1] == "/";
-        let tag_name = cap[2].to_lowercase();
-
-        // Add text before this tag
-        let text_before = &html[last_end..full_match.start()];
-        if !text_before.is_empty() {
-            let decoded = decode_entities(text_before);
-            if !decoded.is_empty() {
-                segments.push(StyledSegment {
-                    text: decoded,
-                    style: current_style.clone(),
-                    link: current_link.clone(),
-                });
+    while let Some(ch) = chars.next() {
+        if ch == '<' {
+            // Save any accumulated text
+            if !current_text.is_empty() {
+                let decoded = decode_entities(&current_text);
+                if !decoded.is_empty() {
+                    segments.push(StyledSegment {
+                        text: decoded,
+                        style: current_style.clone(),
+                        link: current_link.clone(),
+                    });
+                }
+                current_text.clear();
             }
-        }
 
-        last_end = full_match.end();
+            // Parse the tag
+            if let Some(tag) = parse_tag(&mut chars) {
+                match tag {
+                    Tag::Open(name, attrs) => {
+                        let tag_lower = name.to_lowercase();
+                        let prev_style = current_style.clone();
+                        let prev_link = current_link.clone();
 
-        if is_closing {
-            // Pop style from stack
-            if let Some((expected_tag, prev_style, prev_link)) = style_stack.pop() {
-                if expected_tag == tag_name {
-                    current_style = prev_style;
-                    current_link = prev_link;
+                        match tag_lower.as_str() {
+                            "b" | "strong" => {
+                                style_stack.push((tag_lower, prev_style, prev_link));
+                                current_style.bold = true;
+                            }
+                            "i" | "em" => {
+                                style_stack.push((tag_lower, prev_style, prev_link));
+                                current_style.italic = true;
+                            }
+                            "u" => {
+                                style_stack.push((tag_lower, prev_style, prev_link));
+                                current_style.underline = true;
+                            }
+                            "a" => {
+                                if let Some(href) = attrs.get("href") {
+                                    // Validate URL is safe
+                                    if is_safe_url(href) {
+                                        let decoded_url = decode_entities(href);
+                                        style_stack.push((tag_lower, prev_style, prev_link));
+                                        current_link = Some(decoded_url);
+                                        current_style.underline = true;
+                                    }
+                                }
+                            }
+                            "br" | "p" => {
+                                segments.push(StyledSegment::plain("\n"));
+                            }
+                            _ => {} // Ignore unknown tags
+                        }
+                    }
+                    Tag::Close(name) => {
+                        let tag_lower = name.to_lowercase();
+                        // Pop style from stack if it matches
+                        if let Some(pos) = style_stack.iter().rposition(|(t, _, _)| {
+                            t == &tag_lower || (t == "b" && tag_lower == "strong") || (t == "i" && tag_lower == "em")
+                        }) {
+                            let (_, prev_style, prev_link) = style_stack.remove(pos);
+                            current_style = prev_style;
+                            current_link = prev_link;
+                        }
+                    }
                 }
             }
         } else {
-            // Push current style and apply new
-            let prev_style = current_style.clone();
-            let prev_link = current_link.clone();
-
-            match tag_name.as_str() {
-                "b" | "strong" => {
-                    style_stack.push(("b", prev_style, prev_link));
-                    current_style.bold = true;
-                }
-                "i" | "em" => {
-                    style_stack.push(("i", prev_style, prev_link));
-                    current_style.italic = true;
-                }
-                "u" => {
-                    style_stack.push(("u", prev_style, prev_link));
-                    current_style.underline = true;
-                }
-                "a" => {
-                    // Extract href
-                    let tag_content = full_match.as_str();
-                    if let Some(href_cap) = href_pattern.captures(tag_content) {
-                        let url = decode_entities(&href_cap[1]);
-                        style_stack.push(("a", prev_style, prev_link));
-                        current_link = Some(url);
-                        current_style.underline = true; // Links are underlined
-                    }
-                }
-                "br" | "p" => {
-                    // Line breaks - add newline
-                    segments.push(StyledSegment::plain("\n"));
-                }
-                _ => {}
-            }
+            current_text.push(ch);
         }
     }
 
-    // Add remaining text after last tag
-    let remaining = &html[last_end..];
-    if !remaining.is_empty() {
-        let decoded = decode_entities(remaining);
+    // Add any remaining text
+    if !current_text.is_empty() {
+        let decoded = decode_entities(&current_text);
         if !decoded.is_empty() {
             segments.push(StyledSegment {
                 text: decoded,
@@ -144,13 +150,156 @@ pub fn parse_markup(html: &str) -> Vec<StyledSegment> {
         }
     }
 
-    // If no tags were found, return the whole text as plain
+    // If no segments, return plain text
     if segments.is_empty() && !html.is_empty() {
         segments.push(StyledSegment::plain(decode_entities(html)));
     }
 
     // Merge adjacent segments with same style
     merge_segments(segments)
+}
+
+/// Represents a parsed HTML tag
+#[derive(Debug)]
+enum Tag {
+    Open(String, std::collections::HashMap<String, String>),
+    Close(String),
+}
+
+/// Parse a single HTML tag using character-by-character state machine
+fn parse_tag(chars: &mut std::iter::Peekable<std::str::Chars>) -> Option<Tag> {
+    let mut tag_content = String::new();
+
+    // Read until '>'
+    while let Some(&ch) = chars.peek() {
+        chars.next();
+        if ch == '>' {
+            break;
+        }
+        tag_content.push(ch);
+    }
+
+    if tag_content.is_empty() {
+        return None;
+    }
+
+    // Check if closing tag
+    let is_closing = tag_content.starts_with('/');
+    let tag_content = if is_closing {
+        &tag_content[1..]
+    } else {
+        &tag_content
+    };
+
+    // Split tag name from attributes
+    let parts: Vec<&str> = tag_content.split_whitespace().collect();
+    if parts.is_empty() {
+        return None;
+    }
+
+    let tag_name = parts[0].to_string();
+
+    if is_closing {
+        return Some(Tag::Close(tag_name));
+    }
+
+    // Parse attributes for opening tags
+    let mut attrs = std::collections::HashMap::new();
+    let attr_string = parts[1..].join(" ");
+
+    if !attr_string.is_empty() {
+        // Simple attribute parser - looks for name="value" or name='value'
+        let mut i = 0;
+        let attr_chars: Vec<char> = attr_string.chars().collect();
+
+        while i < attr_chars.len() {
+            // Skip whitespace
+            while i < attr_chars.len() && attr_chars[i].is_whitespace() {
+                i += 1;
+            }
+
+            if i >= attr_chars.len() {
+                break;
+            }
+
+            // Read attribute name
+            let mut attr_name = String::new();
+            while i < attr_chars.len() && attr_chars[i] != '=' && !attr_chars[i].is_whitespace() {
+                attr_name.push(attr_chars[i]);
+                i += 1;
+            }
+
+            // Skip to '='
+            while i < attr_chars.len() && attr_chars[i] != '=' {
+                i += 1;
+            }
+            i += 1; // Skip '='
+
+            // Skip whitespace after '='
+            while i < attr_chars.len() && attr_chars[i].is_whitespace() {
+                i += 1;
+            }
+
+            if i >= attr_chars.len() {
+                break;
+            }
+
+            // Read attribute value
+            let quote = if attr_chars[i] == '"' || attr_chars[i] == '\'' {
+                let q = attr_chars[i];
+                i += 1; // Skip opening quote
+                q
+            } else {
+                '\0'
+            };
+
+            let mut attr_value = String::new();
+            if quote != '\0' {
+                while i < attr_chars.len() && attr_chars[i] != quote {
+                    attr_value.push(attr_chars[i]);
+                    i += 1;
+                }
+                i += 1; // Skip closing quote
+            } else {
+                while i < attr_chars.len() && !attr_chars[i].is_whitespace() {
+                    attr_value.push(attr_chars[i]);
+                    i += 1;
+                }
+            }
+
+            if !attr_name.is_empty() {
+                attrs.insert(attr_name.to_lowercase(), attr_value);
+            }
+        }
+    }
+
+    Some(Tag::Open(tag_name, attrs))
+}
+
+/// Validate that a URL is safe (no javascript:, data:, vbscript:, etc.)
+fn is_safe_url(url: &str) -> bool {
+    let url_lower = url.trim().to_lowercase();
+
+    // Allow common safe schemes
+    if url_lower.starts_with("http://")
+        || url_lower.starts_with("https://")
+        || url_lower.starts_with("mailto:") {
+        return true;
+    }
+
+    // Block dangerous schemes
+    if url_lower.starts_with("javascript:")
+        || url_lower.starts_with("data:")
+        || url_lower.starts_with("vbscript:")
+        || url_lower.starts_with("file:")
+        || url_lower.contains("&#") && url_lower.contains("javascript")
+        || url_lower.contains("&#") && url_lower.contains("data") {
+        return false;
+    }
+
+    // For relative URLs (no scheme), allow them
+    // Ammonia should have already blocked dangerous ones
+    !url_lower.contains(':') || url_lower.starts_with("mailto:")
 }
 
 /// Decode HTML entities
@@ -283,5 +432,152 @@ mod tests {
         let plain = segments_to_plain_text(&segments);
         assert!(plain.contains("John"));
         assert!(plain.contains("Hello"));
+    }
+
+    // Security tests
+
+    #[test]
+    fn test_case_insensitive_tags() {
+        let segments1 = parse_markup("<B>Bold</B>");
+        assert!(segments1[0].style.bold);
+
+        let segments2 = parse_markup("<STRONG>Bold</STRONG>");
+        assert!(segments2[0].style.bold);
+
+        let segments3 = parse_markup("<ScRiPt>alert('xss')</ScRiPt>");
+        // Script tags should be ignored, text treated as plain
+        assert_eq!(segments3[0].text, "alert('xss')");
+        assert!(!segments3[0].style.bold);
+    }
+
+    #[test]
+    fn test_javascript_url_blocked() {
+        let html = r#"<a href="javascript:alert('XSS')">click</a>"#;
+        let segments = parse_markup(html);
+        // Link should not be created for javascript: URLs
+        assert!(segments.iter().all(|s| s.link.is_none()));
+    }
+
+    #[test]
+    fn test_data_url_blocked() {
+        let html = r#"<a href="data:text/html,<script>alert('XSS')</script>">click</a>"#;
+        let segments = parse_markup(html);
+        assert!(segments.iter().all(|s| s.link.is_none()));
+    }
+
+    #[test]
+    fn test_vbscript_url_blocked() {
+        let html = r#"<a href="vbscript:msgbox('XSS')">click</a>"#;
+        let segments = parse_markup(html);
+        assert!(segments.iter().all(|s| s.link.is_none()));
+    }
+
+    #[test]
+    fn test_file_url_blocked() {
+        let html = r#"<a href="file:///etc/passwd">click</a>"#;
+        let segments = parse_markup(html);
+        assert!(segments.iter().all(|s| s.link.is_none()));
+    }
+
+    #[test]
+    fn test_safe_urls_allowed() {
+        let html = r#"<a href="https://example.com">HTTPS</a> <a href="http://example.com">HTTP</a> <a href="mailto:test@example.com">Email</a>"#;
+        let segments = parse_markup(html);
+
+        let links: Vec<&StyledSegment> = segments.iter().filter(|s| s.link.is_some()).collect();
+        assert_eq!(links.len(), 3);
+        assert_eq!(links[0].link, Some("https://example.com".to_string()));
+        assert_eq!(links[1].link, Some("http://example.com".to_string()));
+        assert_eq!(links[2].link, Some("mailto:test@example.com".to_string()));
+    }
+
+    #[test]
+    fn test_malformed_tag_attributes() {
+        // Attribute injection attempts
+        let html = r#"<a href="x" onload="evil()">click</a>"#;
+        let segments = parse_markup(html);
+        // Should parse href but ignore onload
+        // In reality, ammonia would strip onload before we see it
+        let has_link = segments.iter().any(|s| s.link.is_some());
+        assert!(has_link);
+    }
+
+    #[test]
+    fn test_unclosed_tags() {
+        let html = "<b>Bold without closing";
+        let segments = parse_markup(html);
+        assert_eq!(segments[0].text, "Bold without closing");
+        // Should still be bold even if tag not closed
+        assert!(segments[0].style.bold);
+    }
+
+    #[test]
+    fn test_nested_quotes_in_attributes() {
+        let html = r#"<a href="https://example.com?q='test'">link</a>"#;
+        let segments = parse_markup(html);
+        let link_seg = segments.iter().find(|s| s.link.is_some()).unwrap();
+        assert!(link_seg.link.as_ref().unwrap().contains("q='test'"));
+    }
+
+    #[test]
+    fn test_empty_href() {
+        let html = r#"<a href="">empty link</a>"#;
+        let segments = parse_markup(html);
+        // Empty href should create link but with empty URL
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].link, Some("".to_string()));
+    }
+
+    #[test]
+    fn test_relative_urls_allowed() {
+        // Relative URLs should be allowed (ammonia handles validation)
+        let html = r#"<a href="/path/to/page">relative</a>"#;
+        let segments = parse_markup(html);
+        let link_seg = segments.iter().find(|s| s.link.is_some());
+        assert!(link_seg.is_some());
+        assert_eq!(link_seg.unwrap().link, Some("/path/to/page".to_string()));
+    }
+
+    #[test]
+    fn test_encoded_javascript_blocked() {
+        // Even encoded javascript should be blocked
+        let html = r#"<a href="&#106;avascript:alert(1)">click</a>"#;
+        let segments = parse_markup(html);
+        // After decoding, this would be javascript: so should be blocked
+        // Note: Our decode_entities doesn't handle &#106; currently
+        // but ammonia should have already blocked this
+        let has_js_link = segments.iter().any(|s| {
+            if let Some(ref url) = s.link {
+                url.to_lowercase().contains("javascript")
+            } else {
+                false
+            }
+        });
+        assert!(!has_js_link, "Encoded javascript URLs should be blocked");
+    }
+
+    #[test]
+    fn test_attribute_without_quotes() {
+        let html = r#"<a href=https://example.com>no quotes</a>"#;
+        let segments = parse_markup(html);
+        let link_seg = segments.iter().find(|s| s.link.is_some());
+        assert!(link_seg.is_some());
+        assert_eq!(link_seg.unwrap().link, Some("https://example.com".to_string()));
+    }
+
+    #[test]
+    fn test_mixed_case_strong_em() {
+        let segments = parse_markup("<StRoNg>bold</StRoNg> <Em>italic</Em>");
+        assert_eq!(segments.len(), 3);
+        assert!(segments[0].style.bold);
+        assert!(segments[2].style.italic);
+    }
+
+    #[test]
+    fn test_whitespace_in_tags() {
+        let html = r#"<  b  >bold<  /  b  >"#;
+        let segments = parse_markup(html);
+        // Should handle whitespace gracefully
+        assert!(segments.iter().any(|s| s.text.contains("bold")));
     }
 }

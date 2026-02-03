@@ -1,29 +1,138 @@
 //! Audio playback for notification sounds
 //!
 //! Supports playing sound files and XDG sound theme sounds.
+//!
+//! # Security
+//!
+//! Sound file paths are validated to prevent path traversal attacks.
+//! Only files in allowed system and user sound directories can be played:
+//! - `/usr/share/sounds/**`
+//! - `/usr/local/share/sounds/**`
+//! - `$XDG_DATA_HOME/sounds/**` (or `$HOME/.local/share/sounds/**`)
 
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
 use rodio::{Decoder, OutputStream, Sink};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
+
+/// Maximum number of concurrent sounds that can be played simultaneously.
+/// This prevents DoS attacks from malicious apps spawning unlimited audio threads.
+const MAX_CONCURRENT_SOUNDS: usize = 4;
+
+/// Tracks the current number of active sound playback threads.
+static ACTIVE_SOUNDS: AtomicUsize = AtomicUsize::new(0);
+
+/// Check if a sound file path is in an allowed directory.
+///
+/// This prevents path traversal attacks where a malicious notification
+/// could try to access arbitrary files like `/etc/passwd` or
+/// `/usr/share/sounds/../../etc/shadow`.
+///
+/// # Allowed directories
+///
+/// - `/usr/share/sounds/**`
+/// - `/usr/local/share/sounds/**`
+/// - `$XDG_DATA_HOME/sounds/**`
+/// - `$HOME/.local/share/sounds/**`
+///
+/// # Security notes
+///
+/// - Uses canonicalization to resolve symlinks and `..` components
+/// - Rejects paths that cannot be canonicalized (e.g., broken symlinks)
+/// - OWASP reference: Path Traversal (CWE-22)
+fn is_allowed_sound_path(path: &Path) -> bool {
+    // Canonicalize to resolve symlinks and .. components
+    // This prevents attacks like /usr/share/sounds/../../etc/passwd
+    let canonical = match path.canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            warn!("Failed to canonicalize sound path {:?}: {}", path, e);
+            return false;
+        }
+    };
+
+    let canonical_str = canonical.to_string_lossy();
+
+    // System sound directories
+    if canonical_str.starts_with("/usr/share/sounds/")
+        || canonical_str.starts_with("/usr/local/share/sounds/")
+    {
+        return true;
+    }
+
+    // User sound directories - check XDG_DATA_HOME first
+    if let Some(data_home) = std::env::var_os("XDG_DATA_HOME") {
+        let user_sounds = PathBuf::from(&data_home).join("sounds");
+        if let Ok(user_canonical) = user_sounds.canonicalize() {
+            if canonical.starts_with(&user_canonical) {
+                return true;
+            }
+        }
+    }
+
+    // Fallback to $HOME/.local/share/sounds
+    if let Some(home) = std::env::var_os("HOME") {
+        let user_sounds = PathBuf::from(&home).join(".local/share/sounds");
+        if let Ok(user_canonical) = user_sounds.canonicalize() {
+            if canonical.starts_with(&user_canonical) {
+                return true;
+            }
+        }
+    }
+
+    warn!(
+        "Sound file path {:?} (canonical: {:?}) is not in an allowed directory",
+        path, canonical
+    );
+    false
+}
 
 /// Play a sound file
 ///
 /// Supports common audio formats: WAV, OGG, MP3, FLAC
 /// Sound is played in a background thread to avoid blocking.
+///
+/// To prevent resource exhaustion from malicious apps, this function limits
+/// the number of concurrent sound playbacks to [`MAX_CONCURRENT_SOUNDS`].
+/// If the limit is reached, the sound request is silently dropped.
 pub fn play_sound_file(path: &Path) -> Result<(), AudioError> {
     if !path.exists() {
         return Err(AudioError::FileNotFound(path.to_path_buf()));
     }
 
+    // Security: Validate path is in an allowed sound directory
+    // This prevents path traversal attacks (CWE-22)
+    if !is_allowed_sound_path(path) {
+        return Err(AudioError::PathNotAllowed(path.to_path_buf()));
+    }
+
+    // Check if we've reached the concurrent sound limit
+    let current = ACTIVE_SOUNDS.load(Ordering::SeqCst);
+    if current >= MAX_CONCURRENT_SOUNDS {
+        warn!(
+            "Maximum concurrent sounds ({}) reached, dropping sound request for {:?}",
+            MAX_CONCURRENT_SOUNDS, path
+        );
+        return Ok(());
+    }
+
+    // Increment the active sound counter
+    ACTIVE_SOUNDS.fetch_add(1, Ordering::SeqCst);
+
     let path = path.to_path_buf();
 
     // Spawn a thread to play the sound so we don't block
     thread::spawn(move || {
-        if let Err(e) = play_sound_file_blocking(&path) {
+        let result = play_sound_file_blocking(&path);
+
+        // Always decrement the counter when done, even on error
+        ACTIVE_SOUNDS.fetch_sub(1, Ordering::SeqCst);
+
+        if let Err(e) = result {
             error!("Failed to play sound file {:?}: {}", path, e);
         }
     });
@@ -126,6 +235,8 @@ pub enum AudioError {
     FileNotFound(PathBuf),
     /// Sound theme entry not found
     SoundNotFound(String),
+    /// Sound file path is not in an allowed directory (security violation)
+    PathNotAllowed(PathBuf),
     /// IO error reading file
     IoError(String),
     /// Error decoding audio file
@@ -141,6 +252,9 @@ impl std::fmt::Display for AudioError {
             AudioError::FileNotFound(path) => write!(f, "Sound file not found: {:?}", path),
             AudioError::SoundNotFound(name) => {
                 write!(f, "Sound '{}' not found in theme", name)
+            }
+            AudioError::PathNotAllowed(path) => {
+                write!(f, "Sound file path not in allowed directory: {:?}", path)
             }
             AudioError::IoError(e) => write!(f, "IO error: {}", e),
             AudioError::DecodeError(e) => write!(f, "Audio decode error: {}", e),
@@ -165,5 +279,167 @@ mod tests {
     fn test_audio_error_display() {
         let err = AudioError::NoAudioDevice;
         assert!(!err.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_path_not_allowed_error_display() {
+        let err = AudioError::PathNotAllowed(PathBuf::from("/etc/passwd"));
+        let msg = err.to_string();
+        assert!(msg.contains("not in allowed directory"));
+        assert!(msg.contains("/etc/passwd"));
+    }
+
+    // Security tests for path traversal prevention (CWE-22)
+    mod security {
+        use super::*;
+
+        #[test]
+        fn test_rejects_etc_passwd() {
+            // Direct path to sensitive system file
+            let path = Path::new("/etc/passwd");
+            assert!(
+                !is_allowed_sound_path(path),
+                "/etc/passwd should be rejected"
+            );
+        }
+
+        #[test]
+        fn test_rejects_path_traversal_from_sounds_dir() {
+            // Path traversal attack: start in allowed dir, escape with ..
+            let path = Path::new("/usr/share/sounds/../../etc/passwd");
+            assert!(
+                !is_allowed_sound_path(path),
+                "Path traversal via .. should be rejected"
+            );
+        }
+
+        #[test]
+        fn test_rejects_arbitrary_home_file() {
+            // Attempting to access arbitrary file in home directory
+            if let Some(home) = std::env::var_os("HOME") {
+                let path = PathBuf::from(&home).join(".bashrc");
+                assert!(
+                    !is_allowed_sound_path(&path),
+                    "~/.bashrc should be rejected"
+                );
+            }
+        }
+
+        #[test]
+        fn test_rejects_tmp_file() {
+            // Temporary files should not be playable
+            let path = Path::new("/tmp/malicious.wav");
+            assert!(
+                !is_allowed_sound_path(path),
+                "/tmp files should be rejected"
+            );
+        }
+
+        #[test]
+        fn test_rejects_var_file() {
+            let path = Path::new("/var/log/messages");
+            assert!(
+                !is_allowed_sound_path(path),
+                "/var files should be rejected"
+            );
+        }
+
+        #[test]
+        fn test_rejects_root_file() {
+            let path = Path::new("/root/.ssh/id_rsa");
+            assert!(
+                !is_allowed_sound_path(path),
+                "/root files should be rejected"
+            );
+        }
+
+        #[test]
+        fn test_rejects_proc_file() {
+            // /proc filesystem should never be accessible
+            let path = Path::new("/proc/self/environ");
+            assert!(
+                !is_allowed_sound_path(path),
+                "/proc files should be rejected"
+            );
+        }
+
+        #[test]
+        fn test_rejects_dev_file() {
+            // Device files should never be accessible
+            let path = Path::new("/dev/random");
+            assert!(
+                !is_allowed_sound_path(path),
+                "/dev files should be rejected"
+            );
+        }
+
+        #[test]
+        fn test_allows_system_sounds_dir() {
+            // Valid system sound path (note: file doesn't need to exist for path check)
+            // We test the path pattern, actual file existence is checked separately
+            let path = Path::new("/usr/share/sounds/freedesktop/stereo/message.oga");
+
+            // This test only passes if the file actually exists (due to canonicalize)
+            // So we check the inverse: if it exists, it should be allowed
+            if path.exists() {
+                assert!(
+                    is_allowed_sound_path(path),
+                    "Valid system sound file should be allowed"
+                );
+            }
+        }
+
+        #[test]
+        fn test_allows_usr_local_sounds_dir() {
+            let path = Path::new("/usr/local/share/sounds/custom/alert.wav");
+
+            // Same as above - only test if file exists
+            if path.exists() {
+                assert!(
+                    is_allowed_sound_path(path),
+                    "Valid /usr/local sound file should be allowed"
+                );
+            }
+        }
+
+        #[test]
+        fn test_rejects_double_encoded_traversal() {
+            // Some path traversal attempts use URL encoding or double dots
+            // Rust's canonicalize handles these, but let's verify
+            let path = Path::new("/usr/share/sounds/../sounds/../../etc/passwd");
+            assert!(
+                !is_allowed_sound_path(path),
+                "Double traversal should be rejected"
+            );
+        }
+
+        #[test]
+        fn test_play_sound_file_returns_path_not_allowed() {
+            // Test that play_sound_file returns the correct error type
+            // We need a file that exists but is not allowed
+            let path = Path::new("/etc/passwd");
+            if path.exists() {
+                let result = play_sound_file(path);
+                assert!(result.is_err());
+                match result.unwrap_err() {
+                    AudioError::PathNotAllowed(p) => {
+                        assert_eq!(p, PathBuf::from("/etc/passwd"));
+                    }
+                    other => panic!("Expected PathNotAllowed, got {:?}", other),
+                }
+            }
+        }
+
+        #[test]
+        fn test_play_sound_file_file_not_found_before_path_check() {
+            // Non-existent file should return FileNotFound, not PathNotAllowed
+            let path = Path::new("/nonexistent/path/to/sound.wav");
+            let result = play_sound_file(path);
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                AudioError::FileNotFound(_) => {}
+                other => panic!("Expected FileNotFound, got {:?}", other),
+            }
+        }
     }
 }

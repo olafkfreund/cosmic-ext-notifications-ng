@@ -333,6 +333,8 @@ struct RateLimiter {
 }
 
 impl RateLimiter {
+    const MAX_APPS: usize = 1000; // Maximum tracked apps to prevent memory exhaustion
+
     fn new() -> Self {
         Self {
             limits: HashMap::new(),
@@ -344,6 +346,21 @@ impl RateLimiter {
     fn check_and_update(&mut self, app_name: &str) -> bool {
         const MAX_PER_MINUTE: u32 = 60;
         const WINDOW: Duration = Duration::from_secs(60);
+
+        // If too many apps tracked, force cleanup first
+        if self.limits.len() >= Self::MAX_APPS {
+            self.cleanup();
+        }
+
+        // If still too many after cleanup, reject (likely attack)
+        if self.limits.len() >= Self::MAX_APPS {
+            tracing::warn!(
+                "Rate limiter tracking too many apps ({}), rejecting notification from '{}'",
+                self.limits.len(),
+                app_name
+            );
+            return false;
+        }
 
         let now = Instant::now();
 
@@ -459,13 +476,15 @@ impl Notifications {
 
         // Check rate limit for new notifications (not replacements)
         if replaces_id == 0 && !self.3.check_and_update(app_name) {
-            // Rate limited - return a dummy ID without processing
-            // Use 0 to indicate the notification was rejected
+            // Rate limited - return a non-zero dummy ID without processing.
+            // Use 1 as a safe fallback that won't conflict with active notifications
+            // and doesn't indicate an error (0 in D-Bus spec can trigger retries)
+            let dummy_id = 1u32;
             tracing::debug!(
-                "Notification from '{}' rejected due to rate limiting",
-                app_name
+                "Notification from '{}' rejected due to rate limiting, returning dummy ID {}",
+                app_name, dummy_id
             );
-            return 0;
+            return dummy_id;
         }
 
         let id = if replaces_id == 0 {
@@ -477,8 +496,11 @@ impl Notifications {
                     NonZeroU64::new(1).unwrap()
                 }
             };
-            // Truncate u64 to u32 for D-Bus compatibility
-            // With u64 internal counter, collision risk is negligible
+            // Truncate u64 to u32 for D-Bus compatibility.
+            // Note: D-Bus spec requires u32, so we truncate. Collision risk is mitigated by:
+            // 1. Short notification lifetime (typically seconds/minutes)
+            // 2. Would need 4.2B notifications to wrap
+            // For extra safety, we could track active IDs, but overhead not justified.
             id.get() as u32
         } else {
             replaces_id

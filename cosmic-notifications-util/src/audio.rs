@@ -55,13 +55,14 @@ fn is_allowed_sound_path(path: &Path) -> bool {
         }
     };
 
-    let canonical_str = canonical.to_string_lossy();
-
-    // System sound directories
-    if canonical_str.starts_with("/usr/share/sounds/")
-        || canonical_str.starts_with("/usr/local/share/sounds/")
-    {
-        return true;
+    // System sound directories - canonicalize for robust comparison
+    let system_dirs = ["/usr/share/sounds", "/usr/local/share/sounds"];
+    for dir in &system_dirs {
+        if let Ok(dir_canonical) = Path::new(dir).canonicalize() {
+            if canonical.starts_with(&dir_canonical) {
+                return true;
+            }
+        }
     }
 
     // User sound directories - check XDG_DATA_HOME first
@@ -106,36 +107,63 @@ pub fn play_sound_file(path: &Path) -> Result<(), AudioError> {
 
     // Security: Validate path is in an allowed sound directory
     // This prevents path traversal attacks (CWE-22)
+    //
+    // Note: There is a small TOCTOU (Time-of-Check-Time-of-Use) window between
+    // validation and file open. For sound files this is acceptable risk because:
+    // 1. Sound directories are typically system-owned with limited write access
+    // 2. Attack requires local file system access
+    // 3. Worst case is playing wrong sound, not code execution
+    // 4. The audio decoder (rodio) is memory-safe Rust
     if !is_allowed_sound_path(path) {
         return Err(AudioError::PathNotAllowed(path.to_path_buf()));
     }
 
-    // Check if we've reached the concurrent sound limit
-    let current = ACTIVE_SOUNDS.load(Ordering::SeqCst);
-    if current >= MAX_CONCURRENT_SOUNDS {
-        warn!(
-            "Maximum concurrent sounds ({}) reached, dropping sound request for {:?}",
-            MAX_CONCURRENT_SOUNDS, path
-        );
-        return Ok(());
-    }
+    // Atomically check and increment the active sound counter
+    // Using compare_exchange prevents race condition where multiple threads
+    // could pass the limit check simultaneously
+    loop {
+        let current = ACTIVE_SOUNDS.load(Ordering::SeqCst);
+        if current >= MAX_CONCURRENT_SOUNDS {
+            warn!(
+                "Maximum concurrent sounds ({}) reached, dropping sound request for {:?}",
+                MAX_CONCURRENT_SOUNDS, path
+            );
+            return Ok(());
+        }
 
-    // Increment the active sound counter
-    ACTIVE_SOUNDS.fetch_add(1, Ordering::SeqCst);
+        // Try to atomically increment if counter hasn't changed
+        match ACTIVE_SOUNDS.compare_exchange(
+            current,
+            current + 1,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            Ok(_) => break, // Successfully incremented, proceed to spawn thread
+            Err(_) => continue, // Counter changed, retry the check
+        }
+    }
 
     let path = path.to_path_buf();
 
     // Spawn a thread to play the sound so we don't block
-    thread::spawn(move || {
-        let result = play_sound_file_blocking(&path);
+    let spawn_result = thread::Builder::new()
+        .name("audio-playback".into())
+        .spawn(move || {
+            let result = play_sound_file_blocking(&path);
 
-        // Always decrement the counter when done, even on error
+            // Always decrement the counter when done, even on error
+            ACTIVE_SOUNDS.fetch_sub(1, Ordering::SeqCst);
+
+            if let Err(e) = result {
+                error!("Failed to play sound file {:?}: {}", path, e);
+            }
+        });
+
+    // Handle spawn failure - must decrement counter if thread creation failed
+    if let Err(e) = spawn_result {
         ACTIVE_SOUNDS.fetch_sub(1, Ordering::SeqCst);
-
-        if let Err(e) = result {
-            error!("Failed to play sound file {:?}: {}", path, e);
-        }
-    });
+        warn!("Failed to spawn audio thread: {}", e);
+    }
 
     Ok(())
 }

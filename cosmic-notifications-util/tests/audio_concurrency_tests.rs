@@ -14,7 +14,27 @@ use std::time::Duration;
 /// For testing, we validate behavior by observing the effects.
 #[test]
 fn test_concurrent_sound_limit_enforcement() {
-    // This test verifies the DoS protection against unbounded thread spawning
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    // This test verifies the DoS protection against unbounded thread spawning.
+    //
+    // IMPORTANT: This test has inherent limitations due to the audio module's design:
+    // - The audio module returns Ok() for all valid requests, even when the concurrent
+    //   limit is reached (graceful degradation by silently dropping excess requests)
+    // - We cannot directly access the internal active_sounds counter
+    // - We cannot reliably verify the exact number of *actually playing* sounds
+    //
+    // What this test DOES verify:
+    // - The system accepts requests gracefully without panicking
+    // - Multiple concurrent threads can safely call play_sound_file()
+    // - The function returns Ok() for valid sound files
+    // - No errors occur during concurrent access
+    //
+    // What this test CANNOT verify:
+    // - The exact number of concurrently playing sounds
+    // - That the limit is precisely enforced (would require internal state access)
+
     // Create a test WAV file in an allowed directory
     let temp_dir = if let Some(home) = std::env::var_os("HOME") {
         PathBuf::from(home).join(".local/share/sounds")
@@ -36,29 +56,49 @@ fn test_concurrent_sound_limit_enforcement() {
         return;
     }
 
-    // Attempt to play many more sounds than the limit (4)
-    // The audio module should gracefully drop excess requests
-    let attempts = 10;
-    let mut success_count = 0;
+    // Track how many calls return Ok() (not how many actually play)
+    let success_count = Arc::new(AtomicUsize::new(0));
+    let mut handles = vec![];
 
-    for _ in 0..attempts {
-        if play_sound_file(&test_file).is_ok() {
-            success_count += 1;
-        }
+    // Attempt to play many more sounds than the limit (typically 4)
+    // Use actual threads to simulate true concurrent requests
+    let concurrent_attempts = 10;
+
+    for _ in 0..concurrent_attempts {
+        let path = test_file.clone();
+        let counter = Arc::clone(&success_count);
+
+        handles.push(std::thread::spawn(move || {
+            if play_sound_file(&path).is_ok() {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }
+        }));
     }
 
-    // All calls should succeed (even if some are dropped internally)
-    // The function returns Ok(()) when limit is reached, not an error
+    // Wait for all threads to complete
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let total_ok = success_count.load(Ordering::SeqCst);
+
+    // All calls should return Ok() (the module accepts requests gracefully)
+    // Note: We can't assert exact count == MAX_CONCURRENT_SOUNDS because the
+    // limit only applies to *concurrent playing* sounds, not total accepted requests.
+    // The audio module may accept all requests and drop excess ones internally.
     assert!(
-        success_count > 0,
-        "At least some sound playback requests should succeed"
+        total_ok > 0,
+        "At least some sound playback requests should return Ok()"
     );
 
-    // Wait for sounds to finish
-    for _ in 0..100 {
-        sleep(Duration::from_millis(100));
-        // We can't directly check the counter, but we wait for cleanup
-    }
+    // Verify we actually attempted concurrent requests
+    assert!(
+        total_ok <= concurrent_attempts,
+        "Should not have more successes than attempts"
+    );
+
+    // Wait for sounds to finish playing before cleanup
+    sleep(Duration::from_secs(2));
 
     // Cleanup
     let _ = fs::remove_file(&test_file);

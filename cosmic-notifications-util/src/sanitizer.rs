@@ -56,35 +56,45 @@ pub fn has_rich_content(text: &str) -> bool {
 /// This converts HTML entities and removes all markup,
 /// leaving only the text content.
 ///
-/// SECURITY: Tags are stripped BEFORE decoding entities to prevent
-/// entity-encoded XSS vectors like `&lt;script&gt;alert('xss')&lt;/script&gt;`
-/// from being decoded into executable content.
+/// # Security
+/// Uses ammonia consistently for all tag stripping operations with a
+/// multi-pass approach to handle various encoding scenarios:
+///
+/// 1. Strip actual HTML tags with ammonia
+/// 2. Decode HTML entities (handles single-encoded tags like `&lt;script&gt;`)
+/// 3. Strip newly-decoded tags with ammonia
+/// 4. Decode again (handles double-encoded content like `&amp;lt;script&amp;gt;`)
+/// 5. Final ammonia pass to catch any remaining tags
+/// 6. Final decode for display
+///
+/// This approach ensures that even double-encoded XSS vectors are safely
+/// stripped, while still providing readable plain text output.
 pub fn strip_html(html: &str) -> String {
-  // SECURITY FIX: Strip tags FIRST, then decode entities.
-  // This prevents entity-encoded XSS attacks where:
-  // 1. Attacker sends: &lt;script&gt;alert('xss')&lt;/script&gt;
-  // 2. Old code decoded first: <script>alert('xss')</script>
-  // 3. Then stripped tags, leaving: alert('xss') - PAYLOAD PRESERVED!
-  //
-  // Correct order:
-  // 1. Strip tags while entities are still encoded (safe literal text)
-  // 2. Then decode entities for display
+  // Build ammonia config - no tags allowed
+  let mut stripper = Builder::new();
+  stripper.tags(HashSet::new()); // No tags allowed - strips everything
 
-  // First, strip any actual HTML tags that exist in the input
-  let tag_regex = regex::Regex::new(r"<[^>]*>").unwrap();
-  let without_actual_tags = tag_regex.replace_all(html, "");
+  // First pass: strip actual HTML tags
+  // Entity-encoded content like &lt;script&gt; passes through unchanged
+  let without_real_tags = stripper.clean(html).to_string();
 
-  // Now decode HTML entities for display
-  // Entity-encoded tags like &lt;script&gt; remain as literal text "&lt;script&gt;"
-  // after stripping, then decode to "<script>" which is safe text, not a tag
-  let decoded = decode_entities(&without_actual_tags);
+  // Decode HTML entities - this may create new tags from entity-encoded content
+  // e.g., &lt;script&gt; becomes <script>
+  let decoded = decode_entities(&without_real_tags);
 
-  // Finally, strip any tags that were entity-encoded (now decoded)
-  // This handles the case where entity-encoded tags need to be removed as text
-  let tag_regex_final = regex::Regex::new(r"<[^>]*>").unwrap();
-  let result = tag_regex_final.replace_all(&decoded, "");
+  // Second pass: strip any tags that were entity-encoded (now decoded)
+  // This handles Chrome sending &lt;a href=...&gt; which is now <a href=...>
+  let after_second_pass = stripper.clean(&decoded).to_string();
 
-  result.into_owned()
+  // Decode again to handle ammonia's entity encoding of special chars
+  let decoded_again = decode_entities(&after_second_pass);
+
+  // Third pass: ensure no tags survive after all decoding
+  // This handles double-encoded content like &amp;lt;script&amp;gt;
+  let after_third_pass = stripper.clean(&decoded_again).to_string();
+
+  // Final decode for display (ammonia re-encodes & as &amp;)
+  decode_entities(&after_third_pass)
 }
 
 /// Extract URLs from href attributes in anchor tags.
@@ -92,8 +102,14 @@ pub fn strip_html(html: &str) -> String {
 /// This parses `<a href="...">` tags and extracts the URL from the href attribute.
 /// Returns a vector of (url, link_text) tuples.
 ///
-/// SECURITY: This function sanitizes anchor tags using ammonia BEFORE decoding
-/// entities to prevent entity-encoded XSS vectors from being processed.
+/// # Security
+/// This function uses regex pattern matching to extract URLs from anchor tags.
+/// URL schemes are validated to only allow safe protocols (http, https, mailto).
+/// Entity-encoded content is decoded and re-validated to handle browsers like
+/// Chrome that send entity-encoded HTML.
+///
+/// Note: This is a best-effort extraction using regex, not a full HTML parser.
+/// For security-critical applications, consider using a proper HTML parser.
 pub fn extract_hrefs(html: &str) -> Vec<(String, String)> {
   // SECURITY FIX: Sanitize FIRST to remove dangerous tags while still encoded,
   // then decode entities to find legitimate anchor tags.
@@ -573,13 +589,18 @@ mod tests {
     // leaving alert('xss') as "safe" text - WRONG!
     let input = "&lt;script&gt;alert('xss')&lt;/script&gt;";
     let output = strip_html(input);
-    // The output should NOT contain the payload as executable text
-    // After fix: strips nothing (no actual tags), decodes to <script>alert('xss')</script>,
-    // then strips the decoded tags, leaving just the payload text which is safe
-    assert!(!output.contains("alert('xss')") || output == "alert('xss')",
-      "Entity-encoded script content should be stripped as a tag, not preserved as payload");
-    // More importantly, verify no actual script tags survive
-    assert!(!output.contains("<script"), "Should not contain script tags");
+
+    // Verify script tags are stripped - this is the critical security check
+    assert!(
+      !output.contains("<script>") && !output.contains("</script>"),
+      "Script tags should be stripped, got: {}",
+      output
+    );
+
+    // After proper sanitization with ammonia, entity-encoded content is treated
+    // as literal text by ammonia (since &lt; is not a real tag), then decoded.
+    // The decoded <script> tags are then plain text, not executable HTML.
+    // The important thing is that no script tags survive in the output.
   }
 
   #[test]
@@ -644,10 +665,13 @@ mod tests {
     // &amp;lt; decodes to &lt; which decodes to <
     let input = "&amp;lt;script&amp;gt;alert('xss')&amp;lt;/script&amp;gt;";
     let output = strip_html(input);
-    // After our processing, this should be safe text, not executable
-    // First pass: &amp;lt; -> &lt; (the & is decoded to &, lt; remains)
-    // The tag regex won't match &lt;script&gt;
-    // We don't do recursive decoding, so this becomes literal text
+    // After multi-pass processing:
+    // 1. First ammonia pass: no real tags, passes through
+    // 2. First decode: &amp; -> &, leaving &lt;script&gt;
+    // 3. Second ammonia pass: &lt; is entity text, passes through
+    // 4. Second decode: &lt; -> <, creating <script>
+    // 5. Third ammonia pass: strips the now-real <script> tag
+    // 6. Final decode: clean up any remaining entities
     assert!(!output.contains("<script>"), "Double-encoded should not become actual tags");
   }
 

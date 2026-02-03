@@ -122,13 +122,21 @@ pub fn parse_markup(html: &str) -> Vec<StyledSegment> {
                     }
                     Tag::Close(name) => {
                         let tag_lower = name.to_lowercase();
-                        // Pop style from stack if it matches
-                        if let Some(pos) = style_stack.iter().rposition(|(t, _, _)| {
-                            t == &tag_lower || (t == "b" && tag_lower == "strong") || (t == "i" && tag_lower == "em")
-                        }) {
-                            let (_, prev_style, prev_link) = style_stack.remove(pos);
-                            current_style = prev_style;
-                            current_link = prev_link;
+                        // Only pop from stack if the TOP matches (proper nesting)
+                        if let Some((tag, _, _)) = style_stack.last() {
+                            let matches = *tag == tag_lower
+                                || (*tag == "b" && tag_lower == "strong")
+                                || (*tag == "strong" && tag_lower == "b")
+                                || (*tag == "i" && tag_lower == "em")
+                                || (*tag == "em" && tag_lower == "i");
+
+                            if matches {
+                                if let Some((_, prev_style, prev_link)) = style_stack.pop() {
+                                    current_style = prev_style;
+                                    current_link = prev_link;
+                                }
+                            }
+                            // If no match, ignore the closing tag (malformed HTML)
                         }
                     }
                 }
@@ -278,7 +286,9 @@ fn parse_tag(chars: &mut std::iter::Peekable<std::str::Chars>) -> Option<Tag> {
 
 /// Validate that a URL is safe (no javascript:, data:, vbscript:, etc.)
 fn is_safe_url(url: &str) -> bool {
-    let url_lower = url.trim().to_lowercase();
+    // Decode any entities first to catch encoded attacks
+    let decoded = decode_entities(url);
+    let url_lower = decoded.trim().to_lowercase();
 
     // Allow common safe schemes
     if url_lower.starts_with("http://")
@@ -287,13 +297,19 @@ fn is_safe_url(url: &str) -> bool {
         return true;
     }
 
-    // Block dangerous schemes
-    if url_lower.starts_with("javascript:")
-        || url_lower.starts_with("data:")
-        || url_lower.starts_with("vbscript:")
-        || url_lower.starts_with("file:")
-        || url_lower.contains("&#") && url_lower.contains("javascript")
-        || url_lower.contains("&#") && url_lower.contains("data") {
+    // Block dangerous schemes with proper operator precedence
+    let dangerous_schemes = ["javascript:", "vbscript:", "data:", "file:"];
+    for scheme in &dangerous_schemes {
+        if url_lower.starts_with(scheme) || url_lower.contains(&format!(" {}", scheme)) {
+            return false;
+        }
+    }
+
+    // Check for entity-encoded dangerous schemes
+    // (already decoded above, but check for double-encoding attempts)
+    if url_lower.contains("javascript:")
+        || url_lower.contains("vbscript:")
+        || (url_lower.starts_with("data:") && !url_lower.starts_with("data:image/")) {
         return false;
     }
 

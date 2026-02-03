@@ -549,14 +549,24 @@ impl CosmicNotifications {
         self.group_notifications();
         self.hidden.push_front(notification);
 
-        // Truncate by memory budget instead of fixed count
+        // Keep newest notifications that fit in memory budget
         // 50MB budget allows ~500 text notifications or ~50 image notifications
+        // hidden is ordered with newest at front (push_front above)
         const MAX_HIDDEN_MEMORY: usize = 50 * 1024 * 1024;
-        let mut total_size = 0;
-        self.hidden.retain(|n| {
-            total_size += n.estimated_size();
-            total_size < MAX_HIDDEN_MEMORY
-        });
+        let mut total_size: usize = 0;
+        let mut keep_count: usize = 0;
+
+        for n in &self.hidden {
+            let size = n.estimated_size();
+            if total_size + size > MAX_HIDDEN_MEMORY {
+                break;
+            }
+            total_size += size;
+            keep_count += 1;
+        }
+
+        // Drop older notifications beyond the budget
+        self.hidden.truncate(keep_count);
     }
 
     fn close(&mut self, i: u32, reason: CloseReason) -> Option<Task<Message>> {

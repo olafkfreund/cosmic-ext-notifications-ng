@@ -269,7 +269,7 @@ impl Notification {
 
     /// Estimate memory usage of this notification in bytes
     ///
-    /// This includes all string data, actions, and image data if present.
+    /// This includes all string data, actions, and hint data (including images).
     /// Used for memory budget tracking of hidden notifications.
     pub fn estimated_size(&self) -> usize {
         let mut size = 0;
@@ -286,13 +286,10 @@ impl Notification {
             size += label.len();
         }
 
-        // Image data (largest contributor)
-        if let Some(Image::Data { data, .. }) = self.image() {
-            size += data.len();
+        // Hints - calculate actual size per hint (includes image data)
+        for hint in &self.hints {
+            size += hint.estimated_size();
         }
-
-        // Hints overhead (approximate)
-        size += self.hints.len() * 32;
 
         // Struct overhead
         size += 200;
@@ -344,6 +341,33 @@ pub enum Hint {
     Value(i32),
     X(i32),
     Y(i32),
+}
+
+impl Hint {
+    /// Estimate memory usage of this hint in bytes
+    pub fn estimated_size(&self) -> usize {
+        match self {
+            Hint::ActionIcons(_) => 8,
+            Hint::Category(s) => s.len() + 8,
+            Hint::DesktopEntry(s) => s.len() + 8,
+            Hint::Image(img) => match img {
+                Image::Name(s) => s.len() + 8,
+                Image::File(p) => p.as_os_str().len() + 8,
+                Image::Data { data, .. } => data.len() + 32,
+            },
+            Hint::IconData(data) => data.len() + 8,
+            Hint::Resident(_) => 8,
+            Hint::SenderPid(_) => 8,
+            Hint::SoundFile(p) => p.as_os_str().len() + 8,
+            Hint::SoundName(s) => s.len() + 8,
+            Hint::SuppressSound(_) => 8,
+            Hint::Transient(_) => 8,
+            Hint::Urgency(_) => 8,
+            Hint::Value(_) => 8,
+            Hint::X(_) => 8,
+            Hint::Y(_) => 8,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

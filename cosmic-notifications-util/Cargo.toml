@@ -7,12 +7,13 @@ rust-version = "1.85"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = ["zbus_notifications", "audio"]
-zbus_notifications = ["image", "zbus"]
+zbus_notifications = ["image", "zbus", "dep:cosmic-notifications-config"]
 image = ["dep:image", "fast_image_resize"]
 audio = ["dep:rodio"]
 
 [dependencies]
 libcosmic = { git = "https://github.com/pop-os/libcosmic", default-features = false }
+cosmic-notifications-config = { path = "../cosmic-notifications-config", optional = true }
 serde = { version = "1.0", features = ["derive", "rc"] }
 zbus = { version = "5.11.0", optional = true }
 fast_image_resize = { version = "5.1.4", optional = true }

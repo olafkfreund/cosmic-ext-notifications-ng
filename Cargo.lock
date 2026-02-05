@@ -1321,6 +1321,7 @@ name = "cosmic-notifications-util"
 version = "0.2.2"
 dependencies = [
  "ammonia",
+ "cosmic-notifications-config",
  "fast_image_resize",
  "image",
  "libcosmic",

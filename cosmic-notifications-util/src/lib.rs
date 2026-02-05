@@ -50,6 +50,54 @@ use std::{
     collections::HashMap, convert::Infallible, fmt, path::PathBuf, str::FromStr, sync::Arc, time::SystemTime,
 };
 
+#[cfg(feature = "zbus_notifications")]
+use cosmic_notifications_config::GroupingMode;
+
+/// A group of related notifications
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotificationGroup {
+    /// The grouping key (app_name or category)
+    pub key: String,
+    /// Display name for the group
+    pub display_name: String,
+    /// Notifications in this group (newest first)
+    pub notifications: Vec<Notification>,
+    /// Whether the group is expanded
+    pub expanded: bool,
+}
+
+impl NotificationGroup {
+    pub fn new(key: String, display_name: String) -> Self {
+        Self {
+            key,
+            display_name,
+            notifications: Vec::new(),
+            expanded: false,
+        }
+    }
+
+    pub fn add(&mut self, notification: Notification) {
+        self.notifications.insert(0, notification); // Newest first
+    }
+
+    pub fn count(&self) -> usize {
+        self.notifications.len()
+    }
+
+    pub fn newest(&self) -> Option<&Notification> {
+        self.notifications.first()
+    }
+
+    /// Get the group label with count (e.g., "Firefox (3)")
+    pub fn label(&self) -> String {
+        if self.notifications.len() > 1 {
+            format!("{} ({})", self.display_name, self.notifications.len())
+        } else {
+            self.display_name.clone()
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Notification {
     pub id: u32,
@@ -395,6 +443,57 @@ pub enum CloseReason {
 pub const PANEL_NOTIFICATIONS_FD: &str = "PANEL_NOTIFICATIONS_FD";
 pub const DAEMON_NOTIFICATIONS_FD: &str = "DAEMON_NOTIFICATIONS_FD";
 
+/// Group notifications according to the specified mode
+#[cfg(feature = "zbus_notifications")]
+pub fn group_notifications(
+    notifications: &[Notification],
+    mode: GroupingMode,
+) -> Vec<NotificationGroup> {
+    use std::collections::HashMap;
+
+    match mode {
+        GroupingMode::None => {
+            // Each notification is its own "group"
+            notifications.iter().map(|n| {
+                let mut group = NotificationGroup::new(
+                    n.id.to_string(),
+                    n.app_name.clone(),
+                );
+                group.add(n.clone());
+                group
+            }).collect()
+        }
+        GroupingMode::ByApp => {
+            let mut groups: HashMap<String, NotificationGroup> = HashMap::new();
+            for notification in notifications {
+                let key = notification.app_name.clone();
+                groups.entry(key.clone())
+                    .or_insert_with(|| NotificationGroup::new(key.clone(), key))
+                    .add(notification.clone());
+            }
+            groups.into_values().collect()
+        }
+        GroupingMode::ByCategory => {
+            let mut groups: HashMap<String, NotificationGroup> = HashMap::new();
+            for notification in notifications {
+                let category = notification.category().unwrap_or("uncategorized");
+                // Normalize category to base type for grouping
+                let (key, display) = match category {
+                    cat if cat.starts_with("email") => ("email".to_string(), "Email".to_string()),
+                    cat if cat.starts_with("im") => ("im".to_string(), "Messages".to_string()),
+                    cat if cat.starts_with("network") => ("network".to_string(), "Network".to_string()),
+                    cat if cat.starts_with("device") => ("device".to_string(), "Devices".to_string()),
+                    _ => (category.to_string(), category.to_string()),
+                };
+                groups.entry(key.clone())
+                    .or_insert_with(|| NotificationGroup::new(key, display))
+                    .add(notification.clone());
+            }
+            groups.into_values().collect()
+        }
+    }
+}
+
 #[cfg(test)]
 mod integration_tests {
     use super::*;
@@ -543,5 +642,233 @@ mod integration_tests {
         assert!(notification.image().is_none());
         assert!(notification.category().is_none());
         assert!(!notification.transient());
+    }
+}
+
+#[cfg(all(test, feature = "zbus_notifications"))]
+mod grouping_tests {
+    use super::*;
+
+    fn create_test_notification(id: u32, app_name: &str, category: Option<&str>) -> Notification {
+        let mut hints = vec![];
+        if let Some(cat) = category {
+            hints.push(Hint::Category(cat.to_string()));
+        }
+
+        Notification {
+            id,
+            app_name: app_name.to_string(),
+            app_icon: "test-icon".to_string(),
+            summary: format!("Test {}", id),
+            body: "Test body".to_string(),
+            actions: vec![],
+            hints,
+            expire_timeout: 5000,
+            time: SystemTime::now(),
+        }
+    }
+
+    #[test]
+    fn test_notification_group_new() {
+        let group = NotificationGroup::new("key1".to_string(), "Display Name".to_string());
+
+        assert_eq!(group.key, "key1");
+        assert_eq!(group.display_name, "Display Name");
+        assert_eq!(group.notifications.len(), 0);
+        assert!(!group.expanded);
+    }
+
+    #[test]
+    fn test_notification_group_add() {
+        let mut group = NotificationGroup::new("firefox".to_string(), "Firefox".to_string());
+        let notif1 = create_test_notification(1, "Firefox", None);
+        let notif2 = create_test_notification(2, "Firefox", None);
+
+        group.add(notif1.clone());
+        assert_eq!(group.count(), 1);
+
+        group.add(notif2.clone());
+        assert_eq!(group.count(), 2);
+
+        // Newest first
+        assert_eq!(group.newest().unwrap().id, 2);
+    }
+
+    #[test]
+    fn test_notification_group_label() {
+        let mut group = NotificationGroup::new("firefox".to_string(), "Firefox".to_string());
+
+        // Single notification - no count
+        group.add(create_test_notification(1, "Firefox", None));
+        assert_eq!(group.label(), "Firefox");
+
+        // Multiple notifications - show count
+        group.add(create_test_notification(2, "Firefox", None));
+        assert_eq!(group.label(), "Firefox (2)");
+
+        group.add(create_test_notification(3, "Firefox", None));
+        assert_eq!(group.label(), "Firefox (3)");
+    }
+
+    #[test]
+    fn test_grouping_mode_none() {
+        let notifications = vec![
+            create_test_notification(1, "Firefox", None),
+            create_test_notification(2, "Chrome", None),
+            create_test_notification(3, "Firefox", None),
+        ];
+
+        let groups = group_notifications(&notifications, GroupingMode::None);
+
+        // Each notification is its own group
+        assert_eq!(groups.len(), 3);
+        assert_eq!(groups[0].count(), 1);
+        assert_eq!(groups[1].count(), 1);
+        assert_eq!(groups[2].count(), 1);
+    }
+
+    #[test]
+    fn test_grouping_by_app() {
+        let notifications = vec![
+            create_test_notification(1, "Firefox", None),
+            create_test_notification(2, "Chrome", None),
+            create_test_notification(3, "Firefox", None),
+            create_test_notification(4, "Chrome", None),
+            create_test_notification(5, "Firefox", None),
+        ];
+
+        let groups = group_notifications(&notifications, GroupingMode::ByApp);
+
+        // Should have 2 groups: Firefox and Chrome
+        assert_eq!(groups.len(), 2);
+
+        // Find Firefox group
+        let firefox_group = groups.iter().find(|g| g.key == "Firefox");
+        assert!(firefox_group.is_some());
+        assert_eq!(firefox_group.unwrap().count(), 3);
+
+        // Find Chrome group
+        let chrome_group = groups.iter().find(|g| g.key == "Chrome");
+        assert!(chrome_group.is_some());
+        assert_eq!(chrome_group.unwrap().count(), 2);
+    }
+
+    #[test]
+    fn test_grouping_by_category() {
+        let notifications = vec![
+            create_test_notification(1, "Thunderbird", Some("email.arrived")),
+            create_test_notification(2, "Gmail", Some("email")),
+            create_test_notification(3, "Telegram", Some("im.received")),
+            create_test_notification(4, "Signal", Some("im")),
+            create_test_notification(5, "NetworkManager", Some("network.connected")),
+            create_test_notification(6, "Unknown", None), // Uncategorized
+        ];
+
+        let groups = group_notifications(&notifications, GroupingMode::ByCategory);
+
+        // Should have groups: Email, Messages, Network, uncategorized
+        assert!(groups.len() >= 4);
+
+        // Find Email group
+        let email_group = groups.iter().find(|g| g.key.contains("email"));
+        assert!(email_group.is_some());
+        let email_count = email_group.unwrap().count();
+        assert!(email_count >= 2); // At least Thunderbird and Gmail
+
+        // Find Messages group
+        let im_group = groups.iter().find(|g| g.key.contains("im"));
+        assert!(im_group.is_some());
+        let im_count = im_group.unwrap().count();
+        assert!(im_count >= 2); // At least Telegram and Signal
+
+        // Find uncategorized group
+        let uncat_group = groups.iter().find(|g| g.key == "uncategorized");
+        assert!(uncat_group.is_some());
+        assert_eq!(uncat_group.unwrap().count(), 1);
+    }
+
+    #[test]
+    fn test_grouping_category_display_names() {
+        let notifications = vec![
+            create_test_notification(1, "App1", Some("email.arrived")),
+            create_test_notification(2, "App2", Some("im.received")),
+            create_test_notification(3, "App3", Some("network.connected")),
+            create_test_notification(4, "App4", Some("device.added")),
+        ];
+
+        let groups = group_notifications(&notifications, GroupingMode::ByCategory);
+
+        // Check display names are user-friendly
+        let email_group = groups.iter().find(|g| g.key.contains("email"));
+        if let Some(group) = email_group {
+            assert_eq!(group.display_name, "Email");
+        }
+
+        let im_group = groups.iter().find(|g| g.key.contains("im"));
+        if let Some(group) = im_group {
+            assert_eq!(group.display_name, "Messages");
+        }
+
+        let network_group = groups.iter().find(|g| g.key.contains("network"));
+        if let Some(group) = network_group {
+            assert_eq!(group.display_name, "Network");
+        }
+
+        let device_group = groups.iter().find(|g| g.key.contains("device"));
+        if let Some(group) = device_group {
+            assert_eq!(group.display_name, "Devices");
+        }
+    }
+
+    #[test]
+    fn test_grouping_preserves_notification_order() {
+        let mut notifications = vec![];
+        for i in 1..=5 {
+            notifications.push(create_test_notification(i, "Firefox", None));
+        }
+
+        let groups = group_notifications(&notifications, GroupingMode::ByApp);
+        assert_eq!(groups.len(), 1);
+
+        let group = &groups[0];
+        assert_eq!(group.count(), 5);
+
+        // Should have notifications in reverse order (newest first)
+        assert_eq!(group.notifications[0].id, 5);
+        assert_eq!(group.notifications[1].id, 4);
+        assert_eq!(group.notifications[2].id, 3);
+        assert_eq!(group.notifications[3].id, 2);
+        assert_eq!(group.notifications[4].id, 1);
+    }
+
+    #[test]
+    fn test_empty_notifications_list() {
+        let notifications: Vec<Notification> = vec![];
+
+        let groups_none = group_notifications(&notifications, GroupingMode::None);
+        assert_eq!(groups_none.len(), 0);
+
+        let groups_app = group_notifications(&notifications, GroupingMode::ByApp);
+        assert_eq!(groups_app.len(), 0);
+
+        let groups_cat = group_notifications(&notifications, GroupingMode::ByCategory);
+        assert_eq!(groups_cat.len(), 0);
+    }
+
+    #[test]
+    fn test_single_notification() {
+        let notifications = vec![create_test_notification(1, "Firefox", Some("email"))];
+
+        let groups_none = group_notifications(&notifications, GroupingMode::None);
+        assert_eq!(groups_none.len(), 1);
+        assert_eq!(groups_none[0].count(), 1);
+
+        let groups_app = group_notifications(&notifications, GroupingMode::ByApp);
+        assert_eq!(groups_app.len(), 1);
+        assert_eq!(groups_app[0].count(), 1);
+
+        let groups_cat = group_notifications(&notifications, GroupingMode::ByCategory);
+        assert_eq!(groups_cat.len(), 1);
+        assert_eq!(groups_cat[0].count(), 1);
     }
 }

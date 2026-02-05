@@ -29,7 +29,7 @@
 // - Card list animations are handled efficiently by cosmic_time::anim! macro
 
 use crate::subscriptions::notifications;
-use crate::widgets::{notification_image, ImageSize, notification_progress, should_show_progress, RichCardConfig};
+use crate::widgets::{notification_progress, should_show_progress, RichCardConfig};
 use cosmic::app::{Core, Settings};
 use cosmic::cosmic_config::{Config, CosmicConfigEntry};
 use cosmic::iced::platform_specific::runtime::wayland::layer_surface::{
@@ -47,14 +47,17 @@ use cosmic::widget::{autosize, button, container, icon, text};
 use cosmic::{Application, Element, app::Task};
 use cosmic_notifications_config::NotificationsConfig;
 use cosmic_notifications_util::{
-    ActionId, CloseReason, Hint, Image, Notification, NotificationImage, NotificationLink,
-    parse_markup, ProcessedImage, detect_links, extract_hrefs, sanitize_html, strip_html,
+    ActionId, CloseReason, Notification, NotificationLink,
+    detect_links, extract_hrefs, sanitize_html, strip_html,
 };
+
+use crate::state::NotificationState;
+use crate::handlers::Message;
+use crate::rendering::{render_notification_image, render_markup_body, render_body_with_links, get_progress_from_hints};
 use cosmic_panel_config::{CosmicPanelConfig, CosmicPanelOuput, PanelAnchor};
 use cosmic_time::{Instant, Timeline, anim, id};
 use iced::Alignment;
 use std::borrow::Cow;
-use std::collections::VecDeque;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -80,8 +83,7 @@ struct CosmicNotifications {
     active_surface: bool,
     autosize_id: iced::id::Id,
     window_id: SurfaceId,
-    cards: Vec<Notification>,
-    hidden: VecDeque<Notification>,
+    state: NotificationState,
     notifications_id: id::Cards,
     notifications_tx: Option<mpsc::Sender<notifications::Input>>,
     config: NotificationsConfig,
@@ -91,24 +93,6 @@ struct CosmicNotifications {
     timeline: Timeline,
 }
 
-#[derive(Debug, Clone)]
-enum Message {
-    ActivateNotification(u32),
-    ActivationToken(Option<String>, u32, Option<ActionId>),
-    Dismissed(u32),
-    Notification(notifications::Event),
-    Timeout(u32),
-    Config(NotificationsConfig),
-    PanelConfig(CosmicPanelConfig),
-    DockConfig(CosmicPanelConfig),
-    Frame(Instant),
-    Ignore,
-    Surface(surface::Action),
-    /// Link clicked in notification body
-    LinkClicked(String),
-    /// Action button clicked (notification_id, action_id)
-    ActionClicked(u32, String),
-}
 
 impl CosmicNotifications {
     /// Render a notification using rich notification widgets
@@ -175,7 +159,7 @@ impl CosmicNotifications {
         if config.show_images {
             if let Some(image) = n.image() {
                 // Image from hints (image-data, image-path) - use Expanded size (128x128)
-                if let Some(img_elem) = self.render_notification_image(image) {
+                if let Some(img_elem) = render_notification_image(image) {
                     body_elements.push(img_elem);
                 }
             } else if !n.app_icon.is_empty() {
@@ -231,16 +215,16 @@ impl CosmicNotifications {
         // Create body text - use markup rendering if HTML is present, otherwise plain text
         let body_element: Element<'static, Message> = if has_markup {
             // Render with HTML markup styling (body-markup capability)
-            let markup_body = self.render_markup_body(&body_text);
+            let markup_body = render_markup_body(&body_text);
             if config.enable_links && !links.is_empty() {
                 // Add link buttons below styled body
-                self.render_body_with_links(&display_body_str, &links)
+                render_body_with_links(&display_body_str, &links)
             } else {
                 markup_body
             }
         } else if config.enable_links && !links.is_empty() {
             // Build text with clickable link segments
-            self.render_body_with_links(&display_body_str, &links)
+            render_body_with_links(&display_body_str, &links)
         } else {
             // Show first line only when no links and no markup
             let body_display = display_body_str.lines().next().unwrap_or_default().to_string();
@@ -274,7 +258,7 @@ impl CosmicNotifications {
         let mut card_content = column![header, body_section].spacing(8);
 
         // Optional progress bar
-        if let Some(progress_value) = self.get_progress_from_hints(n) {
+        if let Some(progress_value) = get_progress_from_hints(n) {
             let progress_bar = notification_progress(progress_value, true);
             card_content = card_content.push(progress_bar);
         }
@@ -367,224 +351,20 @@ impl CosmicNotifications {
             .into()
     }
 
-    /// Render notification image from Image hint
-    /// Uses Expanded size (128x128) for better visibility with text content
-    fn render_notification_image(&self, image: &Image) -> Option<Element<'static, Message>> {
-        match image {
-            Image::Data { width, height, data } => {
-                // Create ProcessedImage from raw data
-                // Clone the inner Vec from Arc - only happens during rendering
-                let processed = ProcessedImage {
-                    data: (**data).clone(),
-                    width: *width,
-                    height: *height,
-                };
-                Some(notification_image(&processed, ImageSize::Expanded))
-            }
-            Image::File(path) => {
-                // Try to load image from file
-                match NotificationImage::from_path(path.to_str().unwrap_or_default()) {
-                    Ok(processed) => Some(notification_image(&processed, ImageSize::Expanded)),
-                    Err(e) => {
-                        tracing::warn!("Failed to load notification image from {}: {}", path.display(), e);
-                        None
-                    }
-                }
-            }
-            Image::Name(name) => {
-                // Use icon from name - 96x96 to match text height
-                Some(
-                    container(icon::from_name(name.as_str()).size(96).icon())
-                        .width(Length::Fixed(96.0))
-                        .height(Length::Fixed(96.0))
-                        .into()
-                )
-            }
-        }
-    }
-
-    /// Extract progress value from notification hints
-    fn get_progress_from_hints(&self, n: &Notification) -> Option<f32> {
-        for hint in &n.hints {
-            if let Hint::Value(value) = hint {
-                // Value hint is typically 0-100, convert to 0.0-1.0
-                let progress = (*value as f32).clamp(0.0, 100.0) / 100.0;
-                if should_show_progress(Some(progress)) {
-                    return Some(progress);
-                }
-            }
-        }
-        None
-    }
-
-    /// Render body text with clickable link segments
-    ///
-    /// For simplicity, renders the full body text followed by clickable link buttons.
-    /// This avoids complex text segmentation while still making links clickable.
-    fn render_body_with_links(
-        &self,
-        body: &str,
-        links: &[cosmic_notifications_util::NotificationLink],
-    ) -> Element<'static, Message> {
-        // Show the full body text
-        let body_text: Element<'static, Message> = text::caption(body.to_string())
-            .width(Length::Fill)
-            .into();
-
-        // If only one link, show body + single link button
-        if links.len() == 1 {
-            let link = &links[0];
-            let url = link.url.clone();
-            let display_url = if url.len() > 40 {
-                format!("{}...", &url[..37])
-            } else {
-                url.clone()
-            };
-
-            let link_button: Element<'static, Message> = button::text(format!("🔗 {}", display_url))
-                .on_press(Message::LinkClicked(url))
-                .class(cosmic::theme::Button::Link)
-                .padding([2, 4])
-                .into();
-
-            return column![body_text, link_button]
-                .spacing(4)
-                .width(Length::Fill)
-                .into();
-        }
-
-        // Multiple links - show body + row of link buttons
-        let mut link_elements: Vec<Element<'static, Message>> = Vec::with_capacity(links.len().min(3));
-
-        for link in links.iter().take(3) {
-            let url = link.url.clone();
-            let display_url = if url.len() > 30 {
-                format!("{}...", &url[..27])
-            } else {
-                url.clone()
-            };
-
-            let link_button: Element<'static, Message> = button::text(format!("🔗 {}", display_url))
-                .on_press(Message::LinkClicked(url))
-                .class(cosmic::theme::Button::Link)
-                .padding([2, 4])
-                .into();
-
-            link_elements.push(link_button);
-        }
-
-        // Build row of link buttons
-        let links_row: Element<'static, Message> = match link_elements.len() {
-            1 => {
-                let mut iter = link_elements.into_iter();
-                match iter.next() {
-                    Some(btn) => btn,
-                    None => {
-                        tracing::warn!("Expected 1 link button but iterator was empty");
-                        cosmic::widget::Space::new(0, 0).into()
-                    }
-                }
-            }
-            2 => {
-                let mut iter = link_elements.into_iter();
-                match (iter.next(), iter.next()) {
-                    (Some(btn1), Some(btn2)) => column![btn1, btn2]
-                        .spacing(2)
-                        .into(),
-                    _ => {
-                        tracing::warn!("Expected 2 link buttons but not all were available");
-                        cosmic::widget::Space::new(0, 0).into()
-                    }
-                }
-            }
-            _ => {
-                let mut iter = link_elements.into_iter();
-                match (iter.next(), iter.next(), iter.next()) {
-                    (Some(btn1), Some(btn2), Some(btn3)) => column![btn1, btn2, btn3]
-                        .spacing(2)
-                        .into(),
-                    _ => {
-                        tracing::warn!("Expected 3 link buttons but not all were available");
-                        cosmic::widget::Space::new(0, 0).into()
-                    }
-                }
-            }
-        };
-
-        column![body_text, links_row]
-            .spacing(4)
-            .width(Length::Fill)
-            .into()
-    }
-
-    /// Render body text with HTML markup processing
-    ///
-    /// Sanitizes HTML and extracts plain text for display.
-    /// The markup is processed and validated even though current cosmic widgets
-    /// don't support styled text rendering.
-    fn render_markup_body(&self, body_html: &str) -> Element<'static, Message> {
-        let sanitized = sanitize_html(body_html);
-        let segments = parse_markup(&sanitized);
-
-        // Convert segments to plain text
-        // Note: Rich text styling (bold/italic) would require cosmic widget support
-        // that currently isn't available. The markup is still processed and validated.
-        let plain_text: String = segments.iter().map(|s| s.text.as_str()).collect();
-
-        if plain_text.is_empty() {
-            return text::caption("").width(Length::Fill).into();
-        }
-
-        // Use first line for display
-        let display_text = plain_text.lines().next().unwrap_or_default().to_string();
-        text::caption(display_text).width(Length::Fill).into()
-    }
 
     fn expire(&mut self, i: u32) {
-        let Some((c_pos, _)) = self.cards.iter().enumerate().find(|(_, n)| n.id == i) else {
-            return;
-        };
-
-        let notification = self.cards.remove(c_pos);
+        self.state.hide_notification(i);
         self.sort_notifications();
         self.group_notifications();
-        self.hidden.push_front(notification);
-
-        // Keep newest notifications that fit in memory budget
-        // 50MB budget allows ~500 text notifications or ~50 image notifications
-        // hidden is ordered with newest at front (push_front above)
-        const MAX_HIDDEN_MEMORY: usize = 50 * 1024 * 1024;
-        let mut total_size: usize = 0;
-        let mut keep_count: usize = 0;
-
-        for n in &self.hidden {
-            let size = n.estimated_size();
-            if total_size + size > MAX_HIDDEN_MEMORY {
-                break;
-            }
-            total_size += size;
-            keep_count += 1;
-        }
-
-        // Drop older notifications beyond the budget
-        self.hidden.truncate(keep_count);
     }
 
     fn close(&mut self, i: u32, reason: CloseReason) -> Option<Task<Message>> {
-        let c_pos = self.cards.iter().position(|n| n.id == i);
-        let notification = c_pos.map(|c_pos| self.cards.remove(c_pos)).or_else(|| {
-            self.hidden
-                .iter()
-                .position(|n| n.id == i)
-                .and_then(|pos| self.hidden.remove(pos))
-        })?;
+        let notification = self.state.remove_notification(i)?;
 
-        if self.cards.is_empty() {
-            self.cards.shrink_to(50);
-        }
-
+        self.state.shrink_visible();
         self.sort_notifications();
         self.group_notifications();
+
         if let Some(sender) = &self.notifications_tx {
             let id = notification.id;
             let sender = sender.clone();
@@ -599,7 +379,7 @@ impl CosmicNotifications {
             tokio::spawn(async move { sender.send(notifications::Input::Dismissed(id)).await });
         }
 
-        if self.cards.is_empty() && self.active_surface {
+        if self.state.is_empty() && self.active_surface {
             self.active_surface = false;
             Some(destroy_layer_surface(self.window_id))
         } else {
@@ -756,7 +536,7 @@ impl CosmicNotifications {
             iced::Task::none()
         }];
 
-        if self.cards.is_empty() && !self.config.do_not_disturb {
+        if self.state.is_empty() && !self.config.do_not_disturb {
             let (anchor, _output) = self.anchor.clone().unwrap_or((Anchor::TOP, None));
             self.active_surface = true;
             tasks.push(get_layer_surface(SctkLayerSurfaceSettings {
@@ -784,91 +564,25 @@ impl CosmicNotifications {
         };
 
         self.sort_notifications();
-
-        let mut insert_sorted =
-            |notification: Notification| match self.cards.binary_search_by(|a| {
-                match a.urgency().cmp(&notification.urgency()) {
-                    std::cmp::Ordering::Equal => a.time.cmp(&notification.time),
-                    other => other,
-                }
-            }) {
-                Ok(pos) => {
-                    self.cards[pos] = notification;
-                }
-                Err(pos) => {
-                    self.cards.insert(pos, notification);
-                }
-            };
-        insert_sorted(notification);
+        self.state.insert_sorted(notification);
         self.group_notifications();
 
         iced::Task::batch(tasks)
     }
 
     fn group_notifications(&mut self) {
-        if self.config.max_per_app == 0 {
-            return;
-        }
-
-        let mut extra_per_app = Vec::new();
-        let mut cur_count = 0;
-        let Some(mut cur_id) = self.cards.first().map(|n| n.app_name.clone()) else {
-            return;
-        };
-        self.cards = self
-            .cards
-            .drain(..)
-            .filter(|n| {
-                if n.app_name == cur_id {
-                    cur_count += 1;
-                } else {
-                    cur_count = 1;
-                    cur_id = n.app_name.clone();
-                }
-                if cur_count > self.config.max_per_app {
-                    extra_per_app.push(n.clone());
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
-
-        for n in extra_per_app {
-            if self.cards.len() < self.config.max_notifications as usize {
-                self.insert_sorted(n);
-            } else {
-                self.cards.push(n);
-            }
-        }
-    }
-
-    fn insert_sorted(&mut self, notification: Notification) {
-        match self
-            .cards
-            .binary_search_by(|a| match notification.urgency().cmp(&a.urgency()) {
-                std::cmp::Ordering::Equal => notification.time.cmp(&a.time),
-                other => other,
-            }) {
-            Ok(pos) => {
-                self.cards[pos] = notification;
-            }
-            Err(pos) => {
-                self.cards.insert(pos, notification);
-            }
-        }
+        self.state.group_by_app(
+            self.config.max_per_app as usize,
+            self.config.max_notifications as usize
+        );
     }
 
     fn sort_notifications(&mut self) {
-        self.cards
-            .sort_by(|a, b| match a.urgency().cmp(&b.urgency()) {
-                std::cmp::Ordering::Equal => a.time.cmp(&b.time),
-                other => other,
-            });
+        self.state.sort_visible();
     }
 
     fn replace_notification(&mut self, notification: Notification) -> Task<Message> {
-        if let Some(notif) = self.cards.iter_mut().find(|n| n.id == notification.id) {
+        if let Some(notif) = self.state.visible_mut().iter_mut().find(|n| n.id == notification.id) {
             *notif = notification;
             Task::none()
         } else {
@@ -890,12 +604,12 @@ impl CosmicNotifications {
         action: Option<ActionId>,
     ) -> Option<Task<Message>> {
         if let Some(tx) = self.notifications_tx.as_ref() {
-            let c_pos = self.cards.iter().position(|n| n.id == id);
-            let notification = c_pos.map(|c_pos| &self.cards[c_pos]).or_else(|| {
-                self.hidden
+            let c_pos = self.state.visible().iter().position(|n| n.id == id);
+            let notification = c_pos.map(|c_pos| &self.state.visible()[c_pos]).or_else(|| {
+                self.state.hidden()
                     .iter()
                     .position(|n| n.id == id)
-                    .map(|pos| &self.hidden[pos])
+                    .map(|pos| &self.state.hidden()[pos])
             })?;
 
             let maybe_action = if action
@@ -971,8 +685,7 @@ impl cosmic::Application for CosmicNotifications {
                 notifications_id: id::Cards::new("Notifications"),
                 notifications_tx: None,
                 timeline: Timeline::new(),
-                cards: Vec::with_capacity(50),
-                hidden: VecDeque::new(),
+                state: NotificationState::new(),
             },
             Task::none(),
         )
@@ -1028,7 +741,7 @@ impl cosmic::Application for CosmicNotifications {
                 }
                 notifications::Event::GetHistory { tx } => {
                     // Send the hidden notifications history
-                    let history: Vec<_> = self.hidden.iter().cloned().collect();
+                    let history: Vec<_> = self.state.hidden().iter().cloned().collect();
                     if let Err(err) = tx.send(history) {
                         tracing::error!("Failed to send history response: {:?}", err);
                     }
@@ -1041,7 +754,7 @@ impl cosmic::Application for CosmicNotifications {
             }
             Message::Timeout(id) => {
                 self.expire(id);
-                if self.cards.is_empty() && self.active_surface {
+                if self.state.is_empty() && self.active_surface {
                     self.active_surface = false;
                     return destroy_layer_surface(self.window_id);
                 }
@@ -1087,7 +800,7 @@ impl cosmic::Application for CosmicNotifications {
 
     #[allow(clippy::too_many_lines)]
     fn view_window(&self, _: SurfaceId) -> Element<Message> {
-        if self.cards.is_empty() {
+        if self.state.is_empty() {
             return container(vertical_space().height(Length::Fixed(1.0)))
                 .center_x(Length::Fixed(1.0))
                 .center_y(Length::Fixed(1.0))
@@ -1098,7 +811,8 @@ impl cosmic::Application for CosmicNotifications {
         let card_config = RichCardConfig::from_notifications_config(&self.config);
 
         let (ids, notif_elems): (Vec<_>, Vec<_>) = self
-            .cards
+            .state
+            .visible()
             .iter()
             .rev()
             .map(|n| {

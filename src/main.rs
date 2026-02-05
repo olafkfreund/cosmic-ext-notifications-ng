@@ -3,6 +3,9 @@ mod config;
 mod localize;
 mod subscriptions;
 mod widgets;
+mod state;
+mod handlers;
+mod rendering;
 
 use config::APP_ID;
 use tracing::{info, metadata::LevelFilter};

@@ -10,9 +10,6 @@
 use fast_image_resize as fr;
 use image::ImageError;
 
-#[cfg(test)]
-use image::RgbaImage;
-
 /// Maximum width for notification images in pixels
 pub const MAX_IMAGE_WIDTH: u32 = 128;
 

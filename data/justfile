@@ -7,9 +7,17 @@ desktop-dst := install-dir / 'applications' / desktop-src
 metainfo-src := appid + '.metainfo.xml'
 metainfo-dst := install-dir / 'metainfo' / metainfo-src
 
+systemd-service-src := appid + '.service'
+systemd-service-dst := install-dir / 'systemd' / 'user' / systemd-service-src
+
+dbus-service-src := 'org.freedesktop.Notifications.service'
+dbus-service-dst := install-dir / 'dbus-1' / 'services' / dbus-service-src
+
 install:
     install -Dm0644 {{desktop-src}} {{desktop-dst}}
     install -Dm0644 {{metainfo-src}} {{metainfo-dst}}
+    install -Dm0644 {{systemd-service-src}} {{systemd-service-dst}}
+    install -Dm0644 {{dbus-service-src}} {{dbus-service-dst}}
 
 uninstall:
-    rm {{desktop-dst}} {{metainfo-dst}}
+    rm {{desktop-dst}} {{metainfo-dst}} {{systemd-service-dst}} {{dbus-service-dst}}

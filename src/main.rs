@@ -1,5 +1,6 @@
 mod app;
 mod config;
+mod constants;
 mod localize;
 mod subscriptions;
 mod widgets;

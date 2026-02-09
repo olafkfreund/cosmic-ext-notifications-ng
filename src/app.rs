@@ -53,6 +53,7 @@ use cosmic_notifications_util::{
 use crate::state::NotificationState;
 use crate::handlers::Message;
 use crate::rendering::{render_notification_image, render_markup_body, render_body_with_links, get_progress_from_hints};
+use crate::constants::*;
 use cosmic_panel_config::{CosmicPanelConfig, CosmicPanelOuput, PanelAnchor};
 use cosmic_time::{Timeline, anim, id};
 use iced::Alignment;
@@ -104,7 +105,7 @@ impl CosmicNotifications {
     /// - Action buttons if present
     fn render_rich_notification(&self, n: &Notification, config: &RichCardConfig) -> Element<'static, Message> {
         // Header: App icon, app name, close button
-        let app_name_text = text::caption(if n.app_name.len() > 24 {
+        let app_name_text = text::caption(if n.app_name.len() > APP_NAME_MAX_LENGTH {
             Cow::from(format!("{:.26}...", n.app_name.lines().next().unwrap_or_default()))
         } else {
             Cow::from(n.app_name.clone())
@@ -113,16 +114,16 @@ impl CosmicNotifications {
 
         // App icon from notification
         let app_icon_elem: Element<'static, Message> = if let Some(icon_widget) = n.notification_icon() {
-            icon_widget.size(16).into()
+            icon_widget.size(ICON_SIZE_SMALL).into()
         } else if !n.app_icon.is_empty() {
-            icon::from_name(n.app_icon.as_str()).size(16).symbolic(true).into()
+            icon::from_name(n.app_icon.as_str()).size(ICON_SIZE_SMALL).symbolic(true).into()
         } else {
-            icon::from_name("application-x-executable-symbolic").size(16).symbolic(true).into()
+            icon::from_name("application-x-executable-symbolic").size(ICON_SIZE_SMALL).symbolic(true).into()
         };
 
         let close_button = button::custom(
             icon::from_name("window-close-symbolic")
-                .size(16)
+                .size(ICON_SIZE_SMALL)
                 .symbolic(true),
         )
         .on_press(Message::Dismissed(n.id))
@@ -163,12 +164,12 @@ impl CosmicNotifications {
                 }
             } else if !n.app_icon.is_empty() {
                 // Fallback to app_icon (from notify-send -i or app_icon parameter)
-                // Use larger 96x96 size to match text height
+                // Use larger size to match text height
                 let icon_elem: Element<'static, Message> = container(
-                    icon::from_name(n.app_icon.as_str()).size(96).icon()
+                    icon::from_name(n.app_icon.as_str()).size(ICON_SIZE_LARGE).icon()
                 )
-                .width(Length::Fixed(96.0))
-                .height(Length::Fixed(96.0))
+                .width(Length::Fixed(ICON_SIZE_LARGE as f32))
+                .height(Length::Fixed(ICON_SIZE_LARGE as f32))
                 .into();
                 body_elements.push(icon_elem);
             }
@@ -264,11 +265,11 @@ impl CosmicNotifications {
 
         // Optional action buttons - inline creation for 'static lifetime
         if config.show_actions && !n.actions.is_empty() {
-            // Filter to non-default actions and take up to 3
+            // Filter to non-default actions and take up to MAX_VISIBLE_ACTIONS
             let visible_actions: Vec<_> = n.actions
                 .iter()
                 .filter(|(id, _)| !matches!(id, ActionId::Default))
-                .take(3)
+                .take(MAX_VISIBLE_ACTIONS)
                 .collect();
 
             if !visible_actions.is_empty() {
@@ -345,7 +346,7 @@ impl CosmicNotifications {
 
         // Wrap in container with padding
         container(card_content)
-            .padding(12)
+            .padding(CARD_PADDING)
             .width(Length::Fill)
             .into()
     }
@@ -545,19 +546,19 @@ impl CosmicNotifications {
                 keyboard_interactivity: KeyboardInteractivity::None,
                 namespace: "notifications".to_string(),
                 margin: IcedMargin {
-                    top: 8,
-                    right: 8,
-                    bottom: 8,
-                    left: 8,
+                    top: NOTIFICATION_MARGIN,
+                    right: NOTIFICATION_MARGIN,
+                    bottom: NOTIFICATION_MARGIN,
+                    left: NOTIFICATION_MARGIN,
                 },
-                // Updated width from 300px to 380px for rich notifications
-                size: Some((Some(380), Some(1))),
+                // Notification window size configuration
+                size: Some((Some(NOTIFICATION_WIDTH as u32), Some(1))),
                 output: IcedOutput::Active, // TODO should we only create the notification on the output the applet is on?
                 size_limits: Limits::NONE
-                    .min_width(300.0)
+                    .min_width(NOTIFICATION_MIN_WIDTH)
                     .min_height(1.0)
-                    .max_height(1920.0)
-                    .max_width(380.0),
+                    .max_height(NOTIFICATION_MAX_HEIGHT)
+                    .max_width(NOTIFICATION_WIDTH),
                 ..Default::default()
             }));
         };
@@ -839,14 +840,14 @@ impl cosmic::Application for CosmicNotifications {
             None,
             true,
         )
-        .width(Length::Fixed(380.));
+        .width(Length::Fixed(NOTIFICATION_WIDTH));
 
-        // Autosize container updated to match new 380px card width
+        // Autosize container configuration
         autosize::autosize(card_list, self.autosize_id.clone())
-            .min_width(200.)
-            .min_height(100.)
-            .max_width(380.)
-            .max_height(1920.)
+            .min_width(AUTOSIZE_MIN_WIDTH)
+            .min_height(AUTOSIZE_MIN_HEIGHT)
+            .max_width(NOTIFICATION_WIDTH)
+            .max_height(NOTIFICATION_MAX_HEIGHT)
             .into()
     }
 

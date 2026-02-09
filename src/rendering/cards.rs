@@ -1,5 +1,6 @@
 use crate::handlers::Message;
 use crate::widgets::{notification_image, ImageSize};
+use crate::constants::*;
 use cosmic::iced::Length;
 use cosmic::iced_widget::{column, container};
 use cosmic::widget::{icon, text};
@@ -88,8 +89,8 @@ pub fn render_body_with_links(
     if links.len() == 1 {
         let link = &links[0];
         let url = link.url.clone();
-        let display_url = if url.len() > 40 {
-            format!("{}...", &url[..37])
+        let display_url = if url.len() > URL_DISPLAY_MAX_SINGLE {
+            format!("{}...", &url[..(URL_DISPLAY_MAX_SINGLE - 3)])
         } else {
             url.clone()
         };
@@ -111,8 +112,8 @@ pub fn render_body_with_links(
 
     for link in links.iter().take(3) {
         let url = link.url.clone();
-        let display_url = if url.len() > 30 {
-            format!("{}...", &url[..27])
+        let display_url = if url.len() > URL_DISPLAY_MAX_MULTI {
+            format!("{}...", &url[..(URL_DISPLAY_MAX_MULTI - 3)])
         } else {
             url.clone()
         };

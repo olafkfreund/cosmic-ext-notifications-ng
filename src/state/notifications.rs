@@ -2,6 +2,7 @@
 
 use cosmic_notifications_util::Notification;
 use std::collections::VecDeque;
+use crate::constants::*;
 
 /// Manages the state of notification queues
 ///
@@ -19,7 +20,7 @@ impl NotificationState {
     /// Create a new notification state
     pub fn new() -> Self {
         Self {
-            cards: Vec::with_capacity(50),
+            cards: Vec::with_capacity(INITIAL_CARDS_CAPACITY),
             hidden: VecDeque::new(),
         }
     }
@@ -74,8 +75,7 @@ impl NotificationState {
         let notification = self.cards.remove(pos);
         self.hidden.push_front(notification);
 
-        // Apply memory budget: 50MB allows ~500 text or ~50 image notifications
-        const MAX_HIDDEN_MEMORY: usize = 50 * 1024 * 1024;
+        // Apply memory budget: allows ~500 text or ~50 image notifications
         self.apply_memory_budget(MAX_HIDDEN_MEMORY);
     }
 
@@ -116,7 +116,7 @@ impl NotificationState {
     /// Shrink visible cards capacity
     pub fn shrink_visible(&mut self) {
         if self.cards.is_empty() {
-            self.cards.shrink_to(50);
+            self.cards.shrink_to(INITIAL_CARDS_CAPACITY);
         }
     }
 

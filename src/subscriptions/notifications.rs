@@ -1,4 +1,5 @@
 use crate::{config::VERSION, subscriptions::applet};
+use crate::constants::*;
 use cosmic::{
     iced::{
         futures::{self, SinkExt},
@@ -31,7 +32,7 @@ pub struct Conns {
 
 impl Conns {
     pub async fn new() -> zbus::Result<Self> {
-        let (tx, rx) = channel(100);
+        let (tx, rx) = channel(CHANNEL_BUFFER_SIZE);
         let panel = match applet::setup_panel_conn(tx.clone()).await {
             Ok(conn) => Some(conn),
             Err(err) => {
@@ -333,8 +334,6 @@ struct RateLimiter {
 }
 
 impl RateLimiter {
-    const MAX_APPS: usize = 1000; // Maximum tracked apps to prevent memory exhaustion
-
     fn new() -> Self {
         Self {
             limits: HashMap::new(),
@@ -344,16 +343,15 @@ impl RateLimiter {
     /// Check if a notification from the given app should be accepted.
     /// Returns true if under rate limit, false if rate limited.
     fn check_and_update(&mut self, app_name: &str) -> bool {
-        const MAX_PER_MINUTE: u32 = 60;
         const WINDOW: Duration = Duration::from_secs(60);
 
         // If too many apps tracked, force cleanup first
-        if self.limits.len() >= Self::MAX_APPS {
+        if self.limits.len() >= RATE_LIMIT_MAX_APPS {
             self.cleanup();
         }
 
         // If still too many after cleanup, reject (likely attack)
-        if self.limits.len() >= Self::MAX_APPS {
+        if self.limits.len() >= RATE_LIMIT_MAX_APPS {
             tracing::warn!(
                 "Rate limiter tracking too many apps ({}), rejecting notification from '{}'",
                 self.limits.len(),
@@ -376,11 +374,11 @@ impl RateLimiter {
         }
 
         // Check rate limit
-        if entry.1 >= MAX_PER_MINUTE {
+        if entry.1 >= RATE_LIMIT_PER_MINUTE {
             tracing::warn!(
                 "Rate limiting notifications from '{}' - exceeded {} notifications per minute",
                 app_name,
-                MAX_PER_MINUTE
+                RATE_LIMIT_PER_MINUTE
             );
             return false;
         }
@@ -469,8 +467,8 @@ impl Notifications {
         expire_timeout: i32,
     ) -> u32 {
         // Periodic cleanup of rate limiter to prevent memory growth
-        // Only cleanup every ~100 notifications to avoid overhead
-        if self.1.get() % 100 == 0 {
+        // Only cleanup periodically to avoid overhead
+        if self.1.get() % RATE_LIMIT_CLEANUP_INTERVAL == 0 {
             self.3.cleanup();
         }
 

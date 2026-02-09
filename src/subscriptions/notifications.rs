@@ -9,10 +9,7 @@ use cosmic::{
 use cosmic_notifications_util::{ActionId, CloseReason, Notification};
 use futures::channel::mpsc;
 use std::{collections::HashMap, fmt::Debug, num::NonZeroU64, time::{Duration, Instant}};
-use tokio::{
-    sync::mpsc::{Receiver, Sender, channel},
-    task::JoinHandle,
-};
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 use tracing::error;
 
 use zbus::{
@@ -40,218 +37,154 @@ impl Conns {
             }
         };
 
-        for _ in 0..5 {
-            if let Some(conn) = ConnectionBuilder::session()
-                .ok()
-                .and_then(|conn| conn.name("org.freedesktop.Notifications").ok())
-                .and_then(|conn| {
-                    conn.serve_at(
-                        "/org/freedesktop/Notifications",
-                        Notifications(
-                            tx.clone(),
-                            NonZeroU64::new(1).unwrap(),
-                            Vec::new(),
-                            RateLimiter::new(),
-                        ),
-                    )
-                    .ok()
-                })
-                // Also serve the applet interface on session bus for history API access
-                .and_then(|conn| {
-                    conn.serve_at(
-                        "/com/system76/NotificationsApplet",
-                        NotificationsApplet { tx: tx.clone() },
-                    )
-                    .ok()
-                })
-                .map(ConnectionBuilder::build)
-            {
-                if let Ok(conn) = conn.await {
-                    return Ok(Self {
-                        tx,
-                        notifications: conn,
-                        rx,
-                        _panel: panel,
-                    });
-                }
-            } else {
-                error!("Failed to create connection at /org/freedesktop/Notifications");
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            }
-        }
+        let conn = ConnectionBuilder::session()?
+            .name("org.freedesktop.Notifications")?
+            .serve_at(
+                "/org/freedesktop/Notifications",
+                Notifications(
+                    tx.clone(),
+                    NonZeroU64::new(1).unwrap(),
+                    Vec::new(),
+                    RateLimiter::new(),
+                ),
+            )?
+            // Also serve the applet interface on session bus for history API access
+            .serve_at(
+                "/com/system76/NotificationsApplet",
+                NotificationsApplet { tx: tx.clone() },
+            )?
+            .build()
+            .await?;
 
-        Err(zbus::Error::Failure(
-            "Failed to create the dbus server".to_string(),
-        ))
+        Ok(Self {
+            tx,
+            notifications: conn,
+            rx,
+            _panel: panel,
+        })
     }
 }
 
-struct Start;
-struct Waiting;
-
-struct Machine<S> {
-    conns: Option<Conns>,
-    output: mpsc::Sender<Event>,
-    marker: core::marker::PhantomData<S>,
+/// State machine for D-Bus connection lifecycle
+enum ConnectionState {
+    /// Initial/reconnecting state - attempt to establish D-Bus connection
+    Connecting {
+        output: mpsc::Sender<Event>,
+        retry_count: u32,
+    },
+    /// Connected and processing messages
+    Connected {
+        output: mpsc::Sender<Event>,
+        conns: Conns,
+    },
 }
 
-impl<S> Machine<S> {
-    pub fn new(conns: Option<Conns>, output: mpsc::Sender<Event>) -> Self {
-        Self {
-            conns,
-            output,
-            marker: core::marker::PhantomData,
-        }
-    }
-
-    pub fn transition<Next>(self) -> Machine<Next> {
-        Machine::<Next> {
-            conns: self.conns,
-            output: self.output,
-            marker: core::marker::PhantomData,
-        }
-    }
-}
-
-impl Machine<Start> {
-    pub async fn exec(mut self) -> Result<(Machine<Waiting>, Conns), ()> {
-        let handle: JoinHandle<zbus::Result<_>> = tokio::spawn(async move {
-            let conns = Conns::new().await?;
-            Ok(conns)
-        });
-
-        match handle.await {
-            Ok(Ok(conns)) => {
-                _ = self.output.send(Event::Ready(conns.tx.clone())).await;
-                Ok((self.transition::<Waiting>(), conns))
-            }
-            Ok(Err(err)) => {
-                error!("Failed to create connection {}", err);
-                Err(())
-            }
-            Err(err) => {
-                error!("Failed to create connection {}", err);
-                Err(())
-            }
-        }
-    }
-}
-
-impl Machine<Waiting> {
-    pub async fn exec(mut self, mut conns: Conns) {
-        loop {
-            if let Some(next) = conns.rx.recv().await {
-                match next {
-                    Input::Activated { token, id, action } => {
-                        let object_server = conns.notifications.object_server();
-                        let Ok(iface_ref) = object_server
-                            .interface::<_, Notifications>("/org/freedesktop/Notifications")
-                            .await
-                        else {
-                            continue;
-                        };
-
-                        if let Err(err) =
-                            Notifications::activation_token(iface_ref.signal_emitter(), id, &token)
-                                .await
-                        {
-                            error!("Failed to signal notification with token {}", err);
-                        }
-
-                        if let Err(err) =
-                            Notifications::action_invoked(iface_ref.signal_emitter(), id, &action)
-                                .await
-                        {
-                            error!("Failed to signal activated notification {}", err);
-                        }
-                        tracing::trace!("Activated application");
-                    }
-                    Input::Closed(id, reason) => {
-                        let object_server = conns.notifications.object_server();
-                        if let Ok(iface_ref) = object_server
-                            .interface::<_, Notifications>("/org/freedesktop/Notifications")
-                            .await
-                        {
-                            _ = Notifications::notification_closed(
-                                iface_ref.signal_emitter(),
-                                id,
-                                reason as u32,
-                            )
-                            .await;
-                        }
-                    }
-                    Input::Notification(notification) => {
-                        _ = self.output.send(Event::Notification(notification)).await;
-                    }
-                    Input::Replace(notification) => {
-                        _ = self.output.send(Event::Replace(notification)).await;
-                    }
-                    Input::CloseNotification(id) => {
-                        _ = self.output.send(Event::CloseNotification(id)).await;
-
-                        let object_server = conns.notifications.object_server();
-                        let Ok(iface_ref) = object_server
-                            .interface::<_, Notifications>("/org/freedesktop/Notifications")
-                            .await
-                        else {
-                            continue;
-                        };
-                        if let Err(err) =
-                            Notifications::notification_closed(iface_ref.signal_emitter(), id, 3)
-                                .await
-                        {
-                            error!("Failed to signal close notification {}", err);
-                        }
-                    }
-                    Input::Dismissed(id) => {
-                        let object_server = conns.notifications.object_server();
-                        let Ok(iface_ref) = object_server
-                            .interface::<_, Notifications>("/org/freedesktop/Notifications")
-                            .await
-                        else {
-                            continue;
-                        };
-                        if let Err(err) =
-                            Notifications::notification_closed(iface_ref.signal_emitter(), id, 2)
-                                .await
-                        {
-                            error!("Failed to signal dismissed notification {}", err);
-                        }
-                    }
-                    Input::AppletConn(c) => {
-                        let object_server = conns.notifications.object_server();
-                        let Ok(iface_ref) = object_server
-                            .interface::<_, Notifications>("/org/freedesktop/Notifications")
-                            .await
-                        else {
-                            continue;
-                        };
-                        let mut iface = iface_ref.get_mut().await;
-                        iface.2.push(c);
-                    }
-                    Input::AppletActivated { id, action } => {
-                        if let Err(err) = self
-                            .output
-                            .send(Event::AppletActivated { id, action })
-                            .await
-                        {
-                            tracing::error!(
-                                "Failed to send activation action for {id} to subscription channel {err}"
-                            );
-                        }
-                    }
-                    Input::GetHistory { tx } => {
-                        // Forward the request to the main app via Event
-                        if let Err(err) = self.output.send(Event::GetHistory { tx }).await {
-                            tracing::error!(
-                                "Failed to send GetHistory event to subscription channel: {err}"
-                            );
-                        }
-                    }
-                }
-            } else {
-                // The channel was closed, so we are done
+/// Process a single input message from the D-Bus interface
+async fn process_input(output: &mut mpsc::Sender<Event>, conns: &Conns, input: Input) {
+    match input {
+        Input::Activated { token, id, action } => {
+            let object_server = conns.notifications.object_server();
+            let Ok(iface_ref) = object_server
+                .interface::<_, Notifications>("/org/freedesktop/Notifications")
+                .await
+            else {
                 return;
+            };
+
+            if let Err(err) =
+                Notifications::activation_token(iface_ref.signal_emitter(), id, &token)
+                    .await
+            {
+                error!("Failed to signal notification with token {}", err);
+            }
+
+            if let Err(err) =
+                Notifications::action_invoked(iface_ref.signal_emitter(), id, &action)
+                    .await
+            {
+                error!("Failed to signal activated notification {}", err);
+            }
+            tracing::trace!("Activated application");
+        }
+        Input::Closed(id, reason) => {
+            let object_server = conns.notifications.object_server();
+            if let Ok(iface_ref) = object_server
+                .interface::<_, Notifications>("/org/freedesktop/Notifications")
+                .await
+            {
+                _ = Notifications::notification_closed(
+                    iface_ref.signal_emitter(),
+                    id,
+                    reason as u32,
+                )
+                .await;
+            }
+        }
+        Input::Notification(notification) => {
+            _ = output.send(Event::Notification(notification)).await;
+        }
+        Input::Replace(notification) => {
+            _ = output.send(Event::Replace(notification)).await;
+        }
+        Input::CloseNotification(id) => {
+            _ = output.send(Event::CloseNotification(id)).await;
+
+            let object_server = conns.notifications.object_server();
+            let Ok(iface_ref) = object_server
+                .interface::<_, Notifications>("/org/freedesktop/Notifications")
+                .await
+            else {
+                return;
+            };
+            if let Err(err) =
+                Notifications::notification_closed(iface_ref.signal_emitter(), id, 3)
+                    .await
+            {
+                error!("Failed to signal close notification {}", err);
+            }
+        }
+        Input::Dismissed(id) => {
+            let object_server = conns.notifications.object_server();
+            let Ok(iface_ref) = object_server
+                .interface::<_, Notifications>("/org/freedesktop/Notifications")
+                .await
+            else {
+                return;
+            };
+            if let Err(err) =
+                Notifications::notification_closed(iface_ref.signal_emitter(), id, 2)
+                    .await
+            {
+                error!("Failed to signal dismissed notification {}", err);
+            }
+        }
+        Input::AppletConn(c) => {
+            let object_server = conns.notifications.object_server();
+            let Ok(iface_ref) = object_server
+                .interface::<_, Notifications>("/org/freedesktop/Notifications")
+                .await
+            else {
+                return;
+            };
+            let mut iface = iface_ref.get_mut().await;
+            iface.2.push(c);
+        }
+        Input::AppletActivated { id, action } => {
+            if let Err(err) = output
+                .send(Event::AppletActivated { id, action })
+                .await
+            {
+                tracing::error!(
+                    "Failed to send activation action for {id} to subscription channel {err}"
+                );
+            }
+        }
+        Input::GetHistory { tx } => {
+            // Forward the request to the main app via Event
+            if let Err(err) = output.send(Event::GetHistory { tx }).await {
+                tracing::error!(
+                    "Failed to send GetHistory event to subscription channel: {err}"
+                );
             }
         }
     }
@@ -315,13 +248,62 @@ pub fn notifications() -> Subscription<Event> {
     Subscription::run_with_id(
         std::any::TypeId::of::<SomeWorker>(),
         stream::channel(100, |output| async move {
-            let machine = Machine::<Start>::new(None, output);
-
-            if let Ok((waiting, conns)) = machine.exec().await {
-                waiting.exec(conns).await;
+            let mut state = ConnectionState::Connecting {
+                output,
+                retry_count: 0,
             };
 
-            futures::pending!();
+            loop {
+                state = match state {
+                    ConnectionState::Connecting { mut output, retry_count } => {
+                        // Exponential backoff: 1s, 2s, 4s, 8s, 16s (max)
+                        if retry_count > 0 {
+                            let delay = Duration::from_secs(
+                                1u64.saturating_mul(2u64.saturating_pow(retry_count.min(4) - 1))
+                            );
+                            tracing::info!(
+                                "Reconnecting to D-Bus in {:?} (attempt {})",
+                                delay,
+                                retry_count + 1
+                            );
+                            tokio::time::sleep(delay).await;
+                        }
+
+                        match Conns::new().await {
+                            Ok(conns) => {
+                                tracing::info!("D-Bus connection established");
+                                _ = output.send(Event::Ready(conns.tx.clone())).await;
+                                ConnectionState::Connected { output, conns }
+                            }
+                            Err(err) => {
+                                tracing::error!("D-Bus connection failed: {}", err);
+                                ConnectionState::Connecting {
+                                    output,
+                                    retry_count: retry_count + 1,
+                                }
+                            }
+                        }
+                    }
+                    ConnectionState::Connected { mut output, mut conns } => {
+                        // Process messages until channel closes
+                        loop {
+                            match conns.rx.recv().await {
+                                Some(input) => {
+                                    process_input(&mut output, &conns, input).await;
+                                }
+                                None => {
+                                    // Channel closed - connection lost
+                                    tracing::warn!("D-Bus connection lost, will reconnect");
+                                    break ConnectionState::Connecting {
+                                        output,
+                                        retry_count: 0,
+                                    };
+                                }
+                            }
+                        }
+                    }
+                };
+            }
         }),
     )
 }

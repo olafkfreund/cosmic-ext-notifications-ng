@@ -572,12 +572,29 @@ impl CosmicNotifications {
     fn group_notifications(&mut self) {
         self.state.group_by_app(
             self.config.max_per_app as usize,
-            self.config.max_notifications as usize
+            self.effective_max_notifications()
         );
     }
 
     fn sort_notifications(&mut self) {
         self.state.sort_visible();
+    }
+
+    /// Calculate effective max notifications based on available screen space
+    fn effective_max_notifications(&self) -> usize {
+        // Estimated height per notification card (including spacing)
+        const ESTIMATED_CARD_HEIGHT: f32 = 120.0;
+        // Estimated panel/dock height reservation
+        const PANEL_RESERVATION: f32 = 48.0;
+        // Maximum screen height we design for
+        const MAX_SCREEN_HEIGHT: f32 = 1920.0;
+
+        let available_height = MAX_SCREEN_HEIGHT - PANEL_RESERVATION;
+        let calculated_max = (available_height / ESTIMATED_CARD_HEIGHT).floor() as usize;
+
+        // Use the lesser of calculated and configured max
+        let config_max = self.config.max_notifications as usize;
+        calculated_max.min(config_max).max(1) // Always show at least 1
     }
 
     fn replace_notification(&mut self, notification: Notification) -> Task<Message> {
@@ -818,7 +835,7 @@ impl cosmic::Application for CosmicNotifications {
                 let e = self.render_rich_notification(n, &card_config);
                 (n.id, e)
             })
-            .take(self.config.max_notifications as usize)
+            .take(self.effective_max_notifications())
             .unzip();
 
         // Card list with animations - width increased from 300px to 380px

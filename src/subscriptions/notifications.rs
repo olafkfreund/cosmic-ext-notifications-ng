@@ -188,6 +188,20 @@ async fn process_input(output: &mut mpsc::Sender<Event>, conns: &Conns, input: I
                 );
             }
         }
+        Input::CleanupRateLimiter => {
+            let object_server = conns.notifications.object_server();
+            if let Ok(iface_ref) = object_server
+                .interface::<_, Notifications>("/org/freedesktop/Notifications")
+                .await
+            {
+                let mut iface = iface_ref.get_mut().await;
+                iface.3.cleanup();
+                tracing::debug!(
+                    "Rate limiter cleanup: {} apps tracked",
+                    iface.3.limits.len()
+                );
+            }
+        }
     }
 }
 
@@ -211,6 +225,7 @@ pub enum Input {
     GetHistory {
         tx: tokio::sync::oneshot::Sender<Vec<Notification>>,
     },
+    CleanupRateLimiter,
 }
 
 #[derive(Debug)]
@@ -274,6 +289,20 @@ pub fn notifications() -> Subscription<Event> {
                             Ok(conns) => {
                                 tracing::info!("D-Bus connection established");
                                 _ = output.send(Event::Ready(conns.tx.clone())).await;
+
+                                // Spawn periodic rate limiter cleanup task
+                                let cleanup_tx = conns.tx.clone();
+                                tokio::spawn(async move {
+                                    let mut interval = tokio::time::interval(Duration::from_secs(RATE_LIMIT_CLEANUP_INTERVAL as u64));
+                                    interval.tick().await; // Skip first immediate tick
+                                    loop {
+                                        interval.tick().await;
+                                        if cleanup_tx.send(Input::CleanupRateLimiter).await.is_err() {
+                                            break; // Channel closed, stop cleanup task
+                                        }
+                                    }
+                                });
+
                                 ConnectionState::Connected { output, conns }
                             }
                             Err(err) => {
@@ -312,7 +341,7 @@ pub fn notifications() -> Subscription<Event> {
 /// Rate limiter to prevent notification spam attacks
 struct RateLimiter {
     // app_name -> (window_start, count_in_window)
-    limits: HashMap<String, (Instant, u32)>,
+    pub(super) limits: HashMap<String, (Instant, u32)>,
 }
 
 impl RateLimiter {

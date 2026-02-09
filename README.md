@@ -180,6 +180,32 @@ show_group_count = true
 app_rules = []
 ```
 
+### D-Bus Auto-Reconnect (v0.4.0+)
+
+The D-Bus subscription now uses a state machine with automatic reconnection:
+
+- **Exponential backoff:** Retries at 1s, 2s, 4s, 8s, 16s intervals
+- **Seamless recovery:** Notifications resume automatically after D-Bus restarts
+- **No manual intervention:** The daemon self-heals without user action
+
+### Dynamic Notification Count (v0.4.0+)
+
+Notification display adapts to your screen size:
+
+- Calculates how many cards fit based on display height (~120px per card)
+- Respects `max_notifications` config as an upper bound
+- Prevents notifications from overflowing on small or vertical displays
+
+### Systemd Socket Activation (v0.4.0+)
+
+The daemon supports on-demand activation:
+
+- **D-Bus activation:** Starts automatically when a notification is sent
+- **Systemd integration:** Proper service lifecycle with auto-restart on failure
+- **Reduced idle memory:** Daemon only runs when needed
+
+Install the service files with `just install` (installs to `$PREFIX/share/systemd/user/` and `$PREFIX/share/dbus-1/services/`).
+
 ### Performance
 
 - **Target:** 60 FPS for animations (30 FPS minimum)
@@ -190,11 +216,16 @@ app_rules = []
   - Arc-wrapped image data eliminates expensive cloning in hot paths
   - Static regex compilation with once_cell for link detection
   - Rate limiting: 60 notifications/minute per application
+- **Optimizations (v0.4.0+):**
+  - Centralized constants module replaces scattered magic numbers
+  - Reusable `build_element_row()` helper eliminates rendering code duplication
+  - Periodic rate limiter cleanup prevents unbounded HashMap growth
 
 ### Security
 
 - **XSS Protection:** Multi-pass HTML sanitization with ammonia
 - **Rate Limiting:** Prevents notification flooding (60/min/app, max 1000 apps tracked)
+- **Rate Limiter Cleanup:** Automatic periodic cleanup of stale entries (every 60s)
 - **Memory Protection:** Budget limits prevent memory exhaustion attacks
 - **Sound Path Validation:** Whitelist-based sound file path validation
 - **Thread Limits:** Maximum 4 concurrent sound playback threads

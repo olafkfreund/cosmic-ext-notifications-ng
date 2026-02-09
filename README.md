@@ -1,6 +1,6 @@
 # Cosmic Notifications NG
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)](https://github.com/olafkfreund/cosmic-notifications-ng/releases/tag/v0.3.1)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/olafkfreund/cosmic-notifications-ng/releases/tag/v0.4.0)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
 
 Enhanced Layer Shell notifications daemon for the COSMIC desktop environment, featuring **rich notification support** including images, action buttons, progress indicators, clickable URLs, animated content, **per-app notification rules**, and **notification grouping**.

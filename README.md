@@ -1,6 +1,6 @@
 # Cosmic Notifications NG
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/olafkfreund/cosmic-notifications-ng/releases/tag/v0.4.0)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue.svg)](https://github.com/olafkfreund/cosmic-notifications-ng/releases/tag/v0.4.1)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
 
 Enhanced Layer Shell notifications daemon for the COSMIC desktop environment, featuring **rich notification support** including images, action buttons, progress indicators, clickable URLs, animated content, **per-app notification rules**, and **notification grouping**.
@@ -180,7 +180,7 @@ show_group_count = true
 app_rules = []
 ```
 
-### D-Bus Auto-Reconnect (v0.4.0+)
+### D-Bus Auto-Reconnect (v0.4.1+)
 
 The D-Bus subscription now uses a state machine with automatic reconnection:
 
@@ -188,7 +188,7 @@ The D-Bus subscription now uses a state machine with automatic reconnection:
 - **Seamless recovery:** Notifications resume automatically after D-Bus restarts
 - **No manual intervention:** The daemon self-heals without user action
 
-### Dynamic Notification Count (v0.4.0+)
+### Dynamic Notification Count (v0.4.1+)
 
 Notification display adapts to your screen size:
 
@@ -196,7 +196,7 @@ Notification display adapts to your screen size:
 - Respects `max_notifications` config as an upper bound
 - Prevents notifications from overflowing on small or vertical displays
 
-### Systemd Socket Activation (v0.4.0+)
+### Systemd Socket Activation (v0.4.1+)
 
 The daemon supports on-demand activation:
 
@@ -205,6 +205,12 @@ The daemon supports on-demand activation:
 - **Reduced idle memory:** Daemon only runs when needed
 
 Install the service files with `just install` (installs to `$PREFIX/share/systemd/user/` and `$PREFIX/share/dbus-1/services/`).
+
+### Upstream Sync (v0.4.1)
+
+Synced with upstream COSMIC Desktop ([pop-os/cosmic-notifications#132](https://github.com/pop-os/cosmic-notifications/pull/132)):
+
+- **`file://` URL support in `app_icon`:** Applications that set `app_icon` to a `file://` URL (e.g. `file:///usr/share/icons/app.png`) now correctly display the icon using path-based loading instead of treating it as an icon name lookup
 
 ### Performance
 
@@ -216,7 +222,7 @@ Install the service files with `just install` (installs to `$PREFIX/share/system
   - Arc-wrapped image data eliminates expensive cloning in hot paths
   - Static regex compilation with once_cell for link detection
   - Rate limiting: 60 notifications/minute per application
-- **Optimizations (v0.4.0+):**
+- **Optimizations (v0.4.1+):**
   - Centralized constants module replaces scattered magic numbers
   - Reusable `build_element_row()` helper eliminates rendering code duplication
   - Periodic rate limiter cleanup prevents unbounded HashMap growth

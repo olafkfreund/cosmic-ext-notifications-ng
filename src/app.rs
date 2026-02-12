@@ -48,7 +48,7 @@ use cosmic::{Application, Element, app::Task};
 use cosmic_ext_notifications_config::NotificationsConfig;
 use cosmic_ext_notifications_util::{
     ActionId, CloseReason, Notification, NotificationLink,
-    detect_links, extract_hrefs, sanitize_html, strip_html,
+    clean_bare_schemes, detect_links, extract_hrefs, sanitize_html, strip_html,
 };
 
 use crate::state::NotificationState;
@@ -201,7 +201,8 @@ impl CosmicNotifications {
         let has_markup = cosmic_ext_notifications_util::has_rich_content(&body_text);
 
         // Strip HTML for link detection and plain text fallback
-        let display_body_str = strip_html(&sanitize_html(&body_text));
+        // Also clean bare URL schemes (e.g., "https://") that Chrome includes as truncated URLs
+        let display_body_str = clean_bare_schemes(&strip_html(&sanitize_html(&body_text)));
 
         // Detect plain text URLs in the stripped body
         let plain_links = detect_links(&display_body_str);

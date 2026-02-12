@@ -37,7 +37,7 @@ pub use link::NotificationLink;
 pub use link_detector::{detect_links, is_safe_url, open_link};
 pub use markup_parser::{parse_markup, segments_to_plain_text, StyledSegment, TextStyle};
 pub use rich_content::RichContent;
-pub use sanitizer::{extract_hrefs, has_rich_content, sanitize_html, strip_html};
+pub use sanitizer::{clean_bare_schemes, extract_hrefs, has_rich_content, sanitize_html, strip_html};
 pub use urgency::NotificationUrgency;
 pub use urgency_style::{
     categories, category_icon, is_message_category, is_system_category, urgency_color,

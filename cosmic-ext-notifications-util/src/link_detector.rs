@@ -28,11 +28,21 @@ pub fn detect_links(text: &str) -> Vec<NotificationLink> {
 }
 
 /// Check if URL is safe to open (http, https, mailto only)
+///
+/// Also rejects bare schemes without a host (e.g., `https://` alone),
+/// which Chrome sometimes sends as truncated URLs in notification bodies.
 pub fn is_safe_url(url: &str) -> bool {
   let url_lower = url.to_lowercase();
-  url_lower.starts_with("https://") ||
-  url_lower.starts_with("http://") ||
-  url_lower.starts_with("mailto:")
+  if url_lower.starts_with("https://") {
+    // Must have content after "https://"
+    url.len() > "https://".len()
+  } else if url_lower.starts_with("http://") {
+    url.len() > "http://".len()
+  } else if url_lower.starts_with("mailto:") {
+    url.len() > "mailto:".len()
+  } else {
+    false
+  }
 }
 
 /// Open a URL in the default browser/handler
@@ -80,6 +90,13 @@ mod tests {
     assert!(is_safe_url("mailto:user@example.com"));
     assert!(!is_safe_url("javascript:alert('xss')"));
     assert!(!is_safe_url("file:///etc/passwd"));
+  }
+
+  #[test]
+  fn test_is_safe_url_rejects_bare_schemes() {
+    assert!(!is_safe_url("https://"), "Bare https:// should not be safe");
+    assert!(!is_safe_url("http://"), "Bare http:// should not be safe");
+    assert!(!is_safe_url("mailto:"), "Bare mailto: should not be safe");
   }
 
   #[test]

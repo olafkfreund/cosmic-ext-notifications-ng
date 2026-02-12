@@ -2,6 +2,7 @@ use ammonia::Builder;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashSet;
+use crate::is_safe_url;
 
 // Static regex patterns compiled once at first use
 static TAG_PATTERN: Lazy<Regex> = Lazy::new(|| {
@@ -107,6 +108,22 @@ pub fn strip_html(html: &str) -> String {
   decode_entities(&after_third_pass)
 }
 
+/// Remove bare URL scheme prefixes (e.g., "https://") from display text.
+///
+/// Chrome sometimes includes truncated URLs as bare scheme prefixes in notification
+/// bodies. These provide no useful information and should be cleaned from display text.
+pub fn clean_bare_schemes(text: &str) -> String {
+  text
+    .lines()
+    .filter(|line| {
+      let trimmed = line.trim();
+      // Filter out lines that are just a bare URL scheme
+      trimmed != "https://" && trimmed != "http://" && trimmed != "mailto:"
+    })
+    .collect::<Vec<_>>()
+    .join("\n")
+}
+
 /// Extract URLs from href attributes in anchor tags.
 ///
 /// This parses `<a href="...">` tags and extracts the URL from the href attribute.
@@ -136,8 +153,9 @@ pub fn extract_hrefs(html: &str) -> Vec<(String, String)> {
     .filter_map(|cap| {
       let url = cap.get(1)?.as_str().to_string();
       let text = cap.get(2)?.as_str().to_string();
-      // Only include safe URLs - filter out javascript:, data:, vbscript:, etc.
-      if url.starts_with("https://") || url.starts_with("http://") || url.starts_with("mailto:") {
+      // Only include safe URLs with a host - filter out javascript:, data:, vbscript:,
+      // and bare schemes like "https://" that Chrome sends as truncated URLs
+      if is_safe_url(&url) {
         Some((url, text))
       } else {
         None
@@ -154,9 +172,8 @@ pub fn extract_hrefs(html: &str) -> Vec<(String, String)> {
     if let (Some(url_match), Some(text_match)) = (cap.get(1), cap.get(2)) {
       let url = url_match.as_str().to_string();
       let text = text_match.as_str().to_string();
-      // Only include safe URLs
-      if (url.starts_with("https://") || url.starts_with("http://") || url.starts_with("mailto:"))
-        && !results.iter().any(|(u, _)| u == &url)
+      // Only include safe URLs with a host (not bare schemes)
+      if is_safe_url(&url) && !results.iter().any(|(u, _)| u == &url)
       {
         results.push((url, text));
       }
@@ -691,5 +708,65 @@ mod tests {
     // Since we don't decode &#60; to <, this remains as literal text
     // which is actually safe behavior (defense in depth)
     assert!(!output.contains("<script>"), "Numeric entity encoded tags should be safe");
+  }
+
+  // Tests for bare URL scheme filtering
+
+  #[test]
+  fn test_extract_hrefs_filters_bare_https_scheme() {
+    // Chrome sends truncated URLs like href="https://" for YouTube notifications
+    let input = r#"<a href="https://www.youtube.com/">www.youtube.com</a>
+<a href="https://">https://</a>"#;
+    let hrefs = extract_hrefs(input);
+    assert_eq!(hrefs.len(), 1, "Should filter out bare https:// scheme");
+    assert_eq!(hrefs[0].0, "https://www.youtube.com/");
+  }
+
+  #[test]
+  fn test_extract_hrefs_filters_bare_http_scheme() {
+    let input = r#"<a href="http://">link</a>"#;
+    let hrefs = extract_hrefs(input);
+    assert!(hrefs.is_empty(), "Should filter out bare http:// scheme");
+  }
+
+  #[test]
+  fn test_extract_hrefs_filters_bare_mailto_scheme() {
+    let input = r#"<a href="mailto:">email</a>"#;
+    let hrefs = extract_hrefs(input);
+    assert!(hrefs.is_empty(), "Should filter out bare mailto: scheme");
+  }
+
+  // Tests for clean_bare_schemes
+
+  #[test]
+  fn test_clean_bare_schemes_removes_https() {
+    let input = "www.youtube.com\n\nVideo Title\n\nhttps://";
+    let output = clean_bare_schemes(input);
+    assert_eq!(output, "www.youtube.com\n\nVideo Title\n");
+    // Also test without trailing empty line
+    let input2 = "www.youtube.com\nVideo Title\nhttps://";
+    let output2 = clean_bare_schemes(input2);
+    assert_eq!(output2, "www.youtube.com\nVideo Title");
+  }
+
+  #[test]
+  fn test_clean_bare_schemes_removes_http() {
+    let input = "Some text\nhttp://\nMore text";
+    let output = clean_bare_schemes(input);
+    assert_eq!(output, "Some text\nMore text");
+  }
+
+  #[test]
+  fn test_clean_bare_schemes_preserves_full_urls() {
+    let input = "Visit https://example.com for more";
+    let output = clean_bare_schemes(input);
+    assert_eq!(output, input, "Full URLs should not be removed");
+  }
+
+  #[test]
+  fn test_clean_bare_schemes_no_change_without_schemes() {
+    let input = "Just plain text\nNo URLs here";
+    let output = clean_bare_schemes(input);
+    assert_eq!(output, input);
   }
 }

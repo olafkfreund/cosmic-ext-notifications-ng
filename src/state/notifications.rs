@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use cosmic_notifications_util::Notification;
+use cosmic_ext_notifications_util::Notification;
 use std::collections::VecDeque;
 use crate::constants::*;
 

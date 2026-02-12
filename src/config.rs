@@ -1,4 +1,4 @@
-pub const APP_ID: &str = "com.system76.CosmicNotifications";
+pub const APP_ID: &str = "io.github.olafkfreund.CosmicExtNotifications";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn profile() -> &'static str {

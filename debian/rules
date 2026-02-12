@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-DESTDIR = debian/cosmic-notifications
+DESTDIR = debian/cosmic-ext-notifications
 CLEAN ?= 1
 VENDOR ?= 1
 

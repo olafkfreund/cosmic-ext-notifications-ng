@@ -1,4 +1,4 @@
-# Example NixOS configuration using cosmic-notifications-ng
+# Example NixOS configuration using cosmic-ext-notifications
 # This demonstrates various configuration patterns
 
 { config, pkgs, ... }:
@@ -10,17 +10,17 @@
   # Enable COSMIC desktop environment
   services.desktopManager.cosmic.enable = true;
 
-  # Basic configuration - enables cosmic-notifications-ng with defaults
-  services.cosmic-notifications-ng = {
+  # Basic configuration - enables cosmic-ext-notifications with defaults
+  services.cosmic-ext-notifications = {
     enable = true;
   };
 
   # Full configuration example with all options
-  # services.cosmic-notifications-ng = {
+  # services.cosmic-ext-notifications = {
   #   enable = true;
   #
   #   # Use a custom package or override
-  #   package = pkgs.cosmic-notifications-ng;
+  #   package = pkgs.cosmic-ext-notifications;
   #
   #   # Replace system cosmic-notifications (default: true)
   #   replaceSystemPackage = true;
@@ -38,7 +38,7 @@
   # };
 
   # Privacy-focused configuration
-  # services.cosmic-notifications-ng = {
+  # services.cosmic-ext-notifications = {
   #   enable = true;
   #   settings = {
   #     show_images = false;
@@ -49,7 +49,7 @@
   # };
 
   # Performance-optimized configuration
-  # services.cosmic-notifications-ng = {
+  # services.cosmic-ext-notifications = {
   #   enable = true;
   #   settings = {
   #     max_image_size = 64;
@@ -61,7 +61,7 @@
   # };
 
   # Minimal configuration (notifications with actions only)
-  # services.cosmic-notifications-ng = {
+  # services.cosmic-ext-notifications = {
   #   enable = true;
   #   settings = {
   #     show_images = false;
@@ -72,7 +72,7 @@
   # };
 
   # Side-by-side installation (not replacing system package)
-  # services.cosmic-notifications-ng = {
+  # services.cosmic-ext-notifications = {
   #   enable = true;
   #   replaceSystemPackage = false;
   # };

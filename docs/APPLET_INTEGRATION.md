@@ -1,14 +1,14 @@
 # Cosmic Applet Notification Integration Guide
 
-> Documentation for integrating cosmic-applet-notification with the rich history API in cosmic-notifications-ng
+> Documentation for integrating cosmic-applet-notification with the rich history API in cosmic-ext-notifications
 
 **Version:** 1.0
 **Last Updated:** 2026-02-02
-**Target Daemon Version:** cosmic-notifications-ng v0.2.1+
+**Target Daemon Version:** cosmic-ext-notifications v0.2.1+
 
 ## Overview
 
-This guide documents how the [cosmic-applet-notification](https://github.com/olafkfreund/cosmic-applet-notification) should integrate with the new rich notification history API provided by cosmic-notifications-ng daemon. The daemon now exposes a `get_history()` D-Bus method that returns full notification metadata, which the applet can use to display historical notifications with rich content support.
+This guide documents how the [cosmic-applet-notification](https://github.com/olafkfreund/cosmic-applet-notification) should integrate with the new rich notification history API provided by cosmic-ext-notifications daemon. The daemon now exposes a `get_history()` D-Bus method that returns full notification metadata, which the applet can use to display historical notifications with rich content support.
 
 ## Current Architecture
 
@@ -112,7 +112,7 @@ pub async fn get_history(&self)
 
 ### Daemon's Notification Struct
 
-Located in daemon: `cosmic-notifications-util/src/lib.rs`
+Located in daemon: `cosmic-ext-notifications-util/src/lib.rs`
 
 ```rust
 pub struct Notification {
@@ -397,7 +397,7 @@ Create `src/dbus/daemon_types.rs`:
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
-/// Daemon's notification structure (from cosmic-notifications-util)
+/// Daemon's notification structure (from cosmic-ext-notifications-util)
 /// This matches the daemon's serialized format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DaemonNotification {

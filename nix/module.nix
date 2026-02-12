@@ -3,19 +3,19 @@
 with lib;
 
 let
-  cfg = config.services.cosmic-notifications-ng;
+  cfg = config.services.cosmic-ext-notifications;
 
   settingsFormat = pkgs.formats.toml { };
 
-  configFile = settingsFormat.generate "cosmic-notifications-ng.toml" cfg.settings;
+  configFile = settingsFormat.generate "cosmic-ext-notifications.toml" cfg.settings;
 in
 {
-  options.services.cosmic-notifications-ng = {
+  options.services.cosmic-ext-notifications = {
     enable = mkEnableOption "COSMIC Notifications NG daemon as a replacement for the default COSMIC notifications";
 
-    package = mkPackageOption pkgs "cosmic-notifications-ng" {
-      default = [ "cosmic-notifications-ng" ];
-      example = literalExpression "pkgs.cosmic-notifications-ng.override { enableSystemd = true; }";
+    package = mkPackageOption pkgs "cosmic-ext-notifications" {
+      default = [ "cosmic-ext-notifications" ];
+      example = literalExpression "pkgs.cosmic-ext-notifications.override { enableSystemd = true; }";
     };
 
     settings = mkOption {
@@ -93,7 +93,7 @@ in
       description = ''
         Configuration for COSMIC Notifications NG.
 
-        See <https://github.com/cosmic-notifications-ng> for available options.
+        See <https://github.com/cosmic-ext-notifications> for available options.
       '';
     };
 
@@ -101,7 +101,7 @@ in
       type = types.bool;
       default = true;
       description = ''
-        Replace the system cosmic-notifications package with cosmic-notifications-ng.
+        Replace the system cosmic-notifications package with cosmic-ext-notifications.
 
         This creates an overlay that substitutes the default COSMIC notifications
         daemon with this enhanced version across the entire system.
@@ -113,14 +113,14 @@ in
     assertions = [
       {
         assertion = cfg.settings.max_image_size > 0;
-        message = "services.cosmic-notifications-ng.settings.max_image_size must be positive";
+        message = "services.cosmic-ext-notifications.settings.max_image_size must be positive";
       }
     ];
 
     warnings = optional (!cfg.settings.enable_animations) [
-      "Animated images are disabled in cosmic-notifications-ng. GIF/APNG/WebP animations will display as static images."
+      "Animated images are disabled in cosmic-ext-notifications. GIF/APNG/WebP animations will display as static images."
     ] ++ optional (!cfg.settings.enable_links) [
-      "Clickable links are disabled in cosmic-notifications-ng. URLs in notifications will not be interactive."
+      "Clickable links are disabled in cosmic-ext-notifications. URLs in notifications will not be interactive."
     ];
 
     nixpkgs.overlays = mkIf cfg.replaceSystemPackage [
@@ -133,9 +133,9 @@ in
 
     # Config setup script - runs before the service starts
     # Creates the config directory and writes the config file
-    systemd.user.services.cosmic-notifications-ng = {
+    systemd.user.services.cosmic-ext-notifications = {
       description = "COSMIC Notifications NG Daemon";
-      documentation = [ "https://github.com/cosmic-notifications-ng" ];
+      documentation = [ "https://github.com/cosmic-ext-notifications" ];
 
       partOf = [ "cosmic-session.target" ];
       after = [ "cosmic-session.target" ];
@@ -146,15 +146,15 @@ in
         BusName = "org.freedesktop.Notifications";
         ExecStartPre = mkIf (cfg.settings != { }) (
           let
-            setupScript = pkgs.writeShellScript "cosmic-notifications-ng-setup" ''
-              mkdir -p "$HOME/.config/cosmic-notifications-ng"
-              cp -f ${configFile} "$HOME/.config/cosmic-notifications-ng/config.toml"
-              chmod 644 "$HOME/.config/cosmic-notifications-ng/config.toml"
+            setupScript = pkgs.writeShellScript "cosmic-ext-notifications-setup" ''
+              mkdir -p "$HOME/.config/cosmic-ext-notifications"
+              cp -f ${configFile} "$HOME/.config/cosmic-ext-notifications/config.toml"
+              chmod 644 "$HOME/.config/cosmic-ext-notifications/config.toml"
             '';
           in
           "${setupScript}"
         );
-        ExecStart = "${cfg.package}/bin/cosmic-notifications";
+        ExecStart = "${cfg.package}/bin/cosmic-ext-notifications";
         Restart = "on-failure";
         RestartSec = 3;
 
@@ -163,7 +163,7 @@ in
         # Security hardening
         ProtectSystem = "strict";
         ProtectHome = "read-only";
-        ReadWritePaths = [ "%h/.config/cosmic-notifications-ng" ];
+        ReadWritePaths = [ "%h/.config/cosmic-ext-notifications" ];
         PrivateTmp = true;
         NoNewPrivileges = true;
         RestrictSUIDSGID = true;

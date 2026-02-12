@@ -38,7 +38,7 @@ fn main() -> anyhow::Result<()> {
     #[cfg(not(feature = "systemd"))]
     trace.with(fmt::layer()).with(env_filter).try_init()?;
 
-    info!("cosmic-notifications ({})", APP_ID);
+    info!("cosmic-ext-notifications ({})", APP_ID);
     info!("Version: {} ({})", VERSION, config::profile());
 
     // Prepare i18n

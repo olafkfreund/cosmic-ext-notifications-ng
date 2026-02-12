@@ -4,7 +4,7 @@ use cosmic::iced::{Alignment, Length};
 use cosmic::iced_widget::{column, row};
 use cosmic::widget::{button, container, icon, text};
 use cosmic::Element;
-use cosmic_notifications_config;
+use cosmic_ext_notifications_config;
 
 /// Configuration for the rich notification card
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ impl Default for RichCardConfig {
 
 impl RichCardConfig {
     /// Create a RichCardConfig from NotificationsConfig
-    pub fn from_notifications_config(config: &cosmic_notifications_config::NotificationsConfig) -> Self {
+    pub fn from_notifications_config(config: &cosmic_ext_notifications_config::NotificationsConfig) -> Self {
         Self {
             width: 380.0,
             show_progress: false,

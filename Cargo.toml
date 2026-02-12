@@ -1,5 +1,5 @@
 [package]
-name = "cosmic-notifications"
+name = "cosmic-ext-notifications"
 version = "0.4.1"
 authors = ["Ashley Wulber <ashley@system76.com>"]
 edition = "2024"
@@ -24,8 +24,8 @@ i18n-embed = { version = "0.16", features = [
 ] }
 i18n-embed-fl = "0.10"
 color-backtrace = "0.7.1"
-cosmic-notifications-util = { path = "./cosmic-notifications-util", features = ["audio"] }
-cosmic-notifications-config = { path = "./cosmic-notifications-config" }
+cosmic-ext-notifications-util = { path = "./cosmic-ext-notifications-util", features = ["audio"] }
+cosmic-ext-notifications-config = { path = "./cosmic-ext-notifications-config" }
 cosmic-panel-config = { git = "https://github.com/pop-os/cosmic-panel" }
 cosmic-time = { git = "https://github.com/pop-os/cosmic-time", default-features = false}
 rust-embed = "8.7.2"
@@ -46,11 +46,11 @@ serde_json = "1.0"
 
 [features]
 systemd = ["dep:tracing-journald"]
-audio = ["cosmic-notifications-util/audio"]
+audio = ["cosmic-ext-notifications-util/audio"]
 default = ["systemd", "audio"]
 
 [workspace]
-members = ["cosmic-notifications-util", "cosmic-notifications-config"]
+members = ["cosmic-ext-notifications-util", "cosmic-ext-notifications-config"]
 
 [profile.release]
 opt-level = "s"

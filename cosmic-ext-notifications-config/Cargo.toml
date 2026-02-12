@@ -1,0 +1,15 @@
+[package]
+name = "cosmic-ext-notifications-config"
+version = "0.2.2"
+edition = "2024"
+rust-version = "1.85"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+cosmic-config = { git = "https://github.com/pop-os/libcosmic" }
+# cosmic-config = { path = "../../libcosmic/cosmic-config" }
+
+[dev-dependencies]
+serde_json = "1.0"

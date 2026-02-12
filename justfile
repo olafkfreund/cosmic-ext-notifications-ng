@@ -1,5 +1,5 @@
-name := 'cosmic-notifications'
-export APPID := 'com.system76.CosmicNotifications'
+name := 'cosmic-ext-notifications'
+export APPID := 'io.github.olafkfreund.CosmicExtNotifications'
 
 rootdir := ''
 prefix := '/usr'
@@ -51,11 +51,11 @@ check-json: (check '--message-format=json')
 
 # Runs after compiling a release build
 run: build-release
-    {{cargo-target-dir}}/release/cosmic-notifications
+    {{cargo-target-dir}}/release/cosmic-ext-notifications
 
 # Build and run with tokio-console enabled
 tokio-console: build-release
-    env TOKIO_CONSOLE=1 {{cargo-target-dir}}/release/cosmic-notifications
+    env TOKIO_CONSOLE=1 {{cargo-target-dir}}/release/cosmic-ext-notifications
 
 # Installs files
 install:

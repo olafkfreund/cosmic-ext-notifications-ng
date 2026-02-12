@@ -1,0 +1,27 @@
+[Desktop Entry]
+Name=COSMIC Notifications
+Name[ar]=إشعارات COSMIC
+Name[cs]=Oznámení COSMIC
+Name[hu]=COSMIC Értesítések
+Name[pt]=Notificações
+Name[zh_CN]=COSMIC 通知
+Name[sv]=COSMIC Aviseringar
+Name[it]=Notifiche di COSMIC
+Comment=COSMIC Notifications
+Comment[ar]=إشعارات COSMIC
+Comment[cs]=Oznámení pro COSMIC
+Comment[hu]=COSMIC Értesítések
+Comment[pt]=Notificações do COSMIC
+Comment[zh_CN]=COSMIC 通知
+Comment[sv]=COSMIC Aviseringar
+Comment[it]=Notifiche di COSMIC
+Type=Application
+Exec=cosmic-ext-notifications
+Terminal=false
+Categories=GNOME;GTK;
+Keywords=Gnome;GTK;
+Keywords[ar]=جنوم;جي‌تي‌كي;
+Icon=io.github.olafkfreund.CosmicExtNotifications
+StartupNotify=true
+NoDisplay=true
+X-HostWaylandDisplay=true

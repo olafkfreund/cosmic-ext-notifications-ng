@@ -1,10 +1,10 @@
 # Notification Handling
 
-This document describes how cosmic-notifications-ng handles incoming notifications, from D-Bus reception through display.
+This document describes how cosmic-ext-notifications handles incoming notifications, from D-Bus reception through display.
 
 ## D-Bus Interface
 
-cosmic-notifications-ng implements the [FreeDesktop Desktop Notifications Specification](https://specifications.freedesktop.org/notification-spec/latest/) version 1.2.
+cosmic-ext-notifications implements the [FreeDesktop Desktop Notifications Specification](https://specifications.freedesktop.org/notification-spec/latest/) version 1.2.
 
 ### Service Registration
 

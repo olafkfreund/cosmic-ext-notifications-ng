@@ -137,7 +137,7 @@ Measured with `ps_mem` after notification displayed:
 
 ### Animation Performance
 
-Measured FPS with `cosmic-notifications` running:
+Measured FPS with `cosmic-ext-notifications` running:
 
 | Scenario                    | FPS   | CPU % |
 |-----------------------------|-------|-------|
@@ -163,24 +163,24 @@ Monitor memory usage with multiple notifications:
 
 ```bash
 # Terminal 1: Start notifications daemon
-RUST_LOG=debug cosmic-notifications
+RUST_LOG=debug cosmic-ext-notifications
 
 # Terminal 2: Send notifications
 ./scripts/test_rich_notifications.sh
 
 # Terminal 3: Monitor memory
-watch -n 1 'ps aux | grep cosmic-notifications | grep -v grep'
+watch -n 1 'ps aux | grep cosmic-ext-notifications | grep -v grep'
 ```
 
 For detailed memory analysis:
 
 ```bash
 # Using valgrind (slow but detailed)
-valgrind --tool=massif cosmic-notifications
+valgrind --tool=massif cosmic-ext-notifications
 
 # Using heaptrack (faster, graphical)
-heaptrack cosmic-notifications
-heaptrack_gui heaptrack.cosmic-notifications.*
+heaptrack cosmic-ext-notifications
+heaptrack_gui heaptrack.cosmic-ext-notifications.*
 ```
 
 ### Animation Profiling
@@ -192,7 +192,7 @@ Test animation frame rate:
 notify-send -i /path/to/animation.gif "Animation Test" "Measuring FPS"
 
 # Monitor with RUST_LOG
-RUST_LOG=debug cosmic-notifications 2>&1 | grep -i "frame\|fps"
+RUST_LOG=debug cosmic-ext-notifications 2>&1 | grep -i "frame\|fps"
 ```
 
 ### CPU Profiling
@@ -201,12 +201,12 @@ Profile CPU usage during typical workload:
 
 ```bash
 # Using perf
-perf record -F 99 -p $(pgrep cosmic-notifications) -- sleep 30
+perf record -F 99 -p $(pgrep cosmic-ext-notifications) -- sleep 30
 perf report
 
 # Using flamegraph
 cargo install flamegraph
-sudo flamegraph -p $(pgrep cosmic-notifications) -- sleep 30
+sudo flamegraph -p $(pgrep cosmic-ext-notifications) -- sleep 30
 # Opens flamegraph.svg
 ```
 
@@ -325,7 +325,7 @@ while true; do
 done &
 
 # Monitor resources
-htop -p $(pgrep cosmic-notifications)
+htop -p $(pgrep cosmic-ext-notifications)
 ```
 
 ## Future Optimizations

@@ -1,4 +1,4 @@
-// Constants module for cosmic-notifications-ng
+// Constants module for cosmic-ext-notifications
 // Centralizes magic numbers for better maintainability
 
 // ============================================================================

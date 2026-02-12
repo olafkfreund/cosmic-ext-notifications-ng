@@ -2,7 +2,7 @@
 
 use cosmic::widget::text;
 use cosmic::Element;
-use cosmic_notifications_util::NotificationLink;
+use cosmic_ext_notifications_util::NotificationLink;
 
 /// Message for link clicks
 #[derive(Debug, Clone)]
@@ -22,6 +22,6 @@ pub fn linkified_body<'a, Message: 'static>(
 
 /// Check if text contains any links
 pub fn has_links(text: &str) -> bool {
-  use cosmic_notifications_util::detect_links;
+  use cosmic_ext_notifications_util::detect_links;
   !detect_links(text).is_empty()
 }

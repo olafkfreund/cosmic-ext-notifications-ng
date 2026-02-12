@@ -1,4 +1,4 @@
 [D-BUS Service]
 Name=org.freedesktop.Notifications
-Exec=/usr/bin/cosmic-notifications
-SystemdService=com.system76.CosmicNotifications.service
+Exec=/usr/bin/cosmic-ext-notifications
+SystemdService=io.github.olafkfreund.CosmicExtNotifications.service

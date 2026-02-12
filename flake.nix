@@ -74,6 +74,7 @@
           '';
           installPhase = ''
             just prefix=$out install
+            ln -s cosmic-ext-notifications $out/bin/cosmic-notifications
           '';
         });
 

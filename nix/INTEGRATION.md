@@ -1,10 +1,10 @@
-# NixOS Integration Guide for cosmic-notifications-ng
+# NixOS Integration Guide for cosmic-ext-notifications
 
-This document provides comprehensive information about the NixOS module for cosmic-notifications-ng.
+This document provides comprehensive information about the NixOS module for cosmic-ext-notifications.
 
 ## Overview
 
-The NixOS module enables declarative configuration and seamless integration of cosmic-notifications-ng with the COSMIC desktop environment. It provides:
+The NixOS module enables declarative configuration and seamless integration of cosmic-ext-notifications with the COSMIC desktop environment. It provides:
 
 - **Drop-in replacement** for the default COSMIC notifications daemon
 - **Type-safe configuration** via NixOS option system
@@ -29,12 +29,12 @@ nix/
 
 #### 1. Options Definition
 
-The module provides structured options under `services.cosmic-notifications-ng`:
+The module provides structured options under `services.cosmic-ext-notifications`:
 
 ```nix
-services.cosmic-notifications-ng = {
+services.cosmic-ext-notifications = {
   enable = mkEnableOption "...";
-  package = mkPackageOption pkgs "cosmic-notifications-ng" { };
+  package = mkPackageOption pkgs "cosmic-ext-notifications" { };
   settings = mkOption { ... };
   replaceSystemPackage = mkOption { ... };
 };
@@ -45,8 +45,8 @@ services.cosmic-notifications-ng = {
 User settings are converted to TOML format and placed in the XDG config directory:
 
 ```nix
-xdg.configFile."cosmic-notifications-ng/config.toml" = {
-  source = settingsFormat.generate "cosmic-notifications-ng.toml" cfg.settings;
+xdg.configFile."cosmic-ext-notifications/config.toml" = {
+  source = settingsFormat.generate "cosmic-ext-notifications.toml" cfg.settings;
 };
 ```
 
@@ -55,7 +55,7 @@ xdg.configFile."cosmic-notifications-ng/config.toml" = {
 The module creates a hardened systemd user service:
 
 ```nix
-systemd.user.services.cosmic-notifications-ng = {
+systemd.user.services.cosmic-ext-notifications = {
   description = "COSMIC Notifications NG Daemon";
   partOf = [ "cosmic-session.target" ];
   serviceConfig = {
@@ -73,42 +73,42 @@ When `replaceSystemPackage = true`, an overlay is created:
 ```nix
 nixpkgs.overlays = [
   (final: prev: {
-    cosmic-notifications = cfg.package;
+    cosmic-ext-notifications = cfg.package;
   })
 ];
 ```
 
 ## Configuration Options Reference
 
-### `services.cosmic-notifications-ng.enable`
+### `services.cosmic-ext-notifications.enable`
 
 **Type:** `boolean`
 **Default:** `false`
 
-Enables the cosmic-notifications-ng daemon. When enabled:
+Enables the cosmic-ext-notifications daemon. When enabled:
 - Systemd user service is created
 - DBus registration is configured
 - Configuration file is generated
 
-### `services.cosmic-notifications-ng.package`
+### `services.cosmic-ext-notifications.package`
 
 **Type:** `package`
-**Default:** `pkgs.cosmic-notifications-ng`
+**Default:** `pkgs.cosmic-ext-notifications`
 
-The package to use for cosmic-notifications-ng. Can be overridden to use custom builds:
+The package to use for cosmic-ext-notifications. Can be overridden to use custom builds:
 
 ```nix
-package = pkgs.cosmic-notifications-ng.override {
+package = pkgs.cosmic-ext-notifications.override {
   enableSystemd = true;
 };
 ```
 
-### `services.cosmic-notifications-ng.settings`
+### `services.cosmic-ext-notifications.settings`
 
 **Type:** `attribute set`
 **Default:** `{}`
 
-Configuration settings for cosmic-notifications-ng. All settings are optional.
+Configuration settings for cosmic-ext-notifications. All settings are optional.
 
 #### `settings.show_images`
 
@@ -145,12 +145,12 @@ Make HTTP/HTTPS URLs in notification text clickable.
 
 Enable GIF/APNG/WebP animations (100 frame limit, 30s max duration).
 
-### `services.cosmic-notifications-ng.replaceSystemPackage`
+### `services.cosmic-ext-notifications.replaceSystemPackage`
 
 **Type:** `boolean`
 **Default:** `true`
 
-Create a nixpkgs overlay that replaces `cosmic-notifications` with `cosmic-notifications-ng` system-wide.
+Create a nixpkgs overlay that replaces `cosmic-ext-notifications` with `cosmic-ext-notifications` system-wide.
 
 ## Security Model
 
@@ -202,7 +202,7 @@ SystemCallFilter = "@system-service ~@privileged";
 Check the security score with:
 
 ```bash
-systemd-analyze security cosmic-notifications-ng
+systemd-analyze security cosmic-ext-notifications
 ```
 
 Expected score: **9.0/10** or better (lower is more secure).
@@ -246,18 +246,18 @@ warnings = optional (!cfg.settings.enable_animations) [
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    cosmic-notifications-ng.url = "github:user/cosmic-notifications-ng";
-    cosmic-notifications-ng.inputs.nixpkgs.follows = "nixpkgs";
+    cosmic-ext-notifications.url = "github:user/cosmic-ext-notifications";
+    cosmic-ext-notifications.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { nixpkgs, cosmic-notifications-ng, ... }: {
+  outputs = { nixpkgs, cosmic-ext-notifications, ... }: {
     nixosConfigurations.hostname = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        cosmic-notifications-ng.nixosModules.default
+        cosmic-ext-notifications.nixosModules.default
         {
           services.desktopManager.cosmic.enable = true;
-          services.cosmic-notifications-ng.enable = true;
+          services.cosmic-ext-notifications.enable = true;
         }
       ];
     };
@@ -271,18 +271,18 @@ warnings = optional (!cfg.settings.enable_animations) [
 { config, pkgs, ... }:
 
 let
-  cosmic-notifications-ng = builtins.fetchGit {
+  cosmic-ext-notifications = builtins.fetchGit {
     url = "https://github.com/user/cosmic-notifications-ng";
     ref = "main";
   };
 in
 {
   imports = [
-    "${cosmic-notifications-ng}/nix/module.nix"
+    "${cosmic-ext-notifications}/nix/module.nix"
   ];
 
   services.desktopManager.cosmic.enable = true;
-  services.cosmic-notifications-ng.enable = true;
+  services.cosmic-ext-notifications.enable = true;
 }
 ```
 
@@ -293,12 +293,12 @@ in
 
 {
   imports = [
-    /home/user/projects/cosmic-notifications-ng/nix/module.nix
+    /home/user/projects/cosmic-ext-notifications/nix/module.nix
   ];
 
-  services.cosmic-notifications-ng = {
+  services.cosmic-ext-notifications = {
     enable = true;
-    package = pkgs.callPackage /home/user/projects/cosmic-notifications-ng { };
+    package = pkgs.callPackage /home/user/projects/cosmic-ext-notifications { };
   };
 }
 ```
@@ -316,7 +316,7 @@ sudo nixos-rebuild switch
 # Log out and back in to COSMIC
 
 # Verify service status
-systemctl --user status cosmic-notifications-ng
+systemctl --user status cosmic-ext-notifications
 
 # Send test notification
 notify-send "Test" "If you see this, it works!"
@@ -349,18 +349,18 @@ Create a NixOS test:
 
 ```nix
 import <nixpkgs/nixos/tests/make-test-python.nix> ({ pkgs, ... }: {
-  name = "cosmic-notifications-ng-test";
+  name = "cosmic-ext-notifications-test";
 
   nodes.machine = { ... }: {
     imports = [ ./nix/module.nix ];
     services.desktopManager.cosmic.enable = true;
-    services.cosmic-notifications-ng.enable = true;
+    services.cosmic-ext-notifications.enable = true;
   };
 
   testScript = ''
     machine.start()
     machine.wait_for_unit("cosmic-session.target", "testuser")
-    machine.wait_for_unit("cosmic-notifications-ng.service", "testuser")
+    machine.wait_for_unit("cosmic-ext-notifications.service", "testuser")
 
     # Send notification
     machine.succeed("sudo -u testuser DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus notify-send 'Test' 'Message'")
@@ -375,7 +375,7 @@ import <nixpkgs/nixos/tests/make-test-python.nix> ({ pkgs, ... }: {
 
 ### Service Not Starting
 
-**Symptom:** `systemctl --user status cosmic-notifications-ng` shows inactive
+**Symptom:** `systemctl --user status cosmic-ext-notifications` shows inactive
 
 **Solutions:**
 1. Check COSMIC session is running:
@@ -390,7 +390,7 @@ import <nixpkgs/nixos/tests/make-test-python.nix> ({ pkgs, ... }: {
 
 3. View detailed logs:
    ```bash
-   journalctl --user -u cosmic-notifications-ng -b
+   journalctl --user -u cosmic-ext-notifications -b
    ```
 
 ### Configuration Not Applied
@@ -400,12 +400,12 @@ import <nixpkgs/nixos/tests/make-test-python.nix> ({ pkgs, ... }: {
 **Solutions:**
 1. Verify config file exists:
    ```bash
-   cat ~/.config/cosmic-notifications-ng/config.toml
+   cat ~/.config/cosmic-ext-notifications/config.toml
    ```
 
 2. Restart the service:
    ```bash
-   systemctl --user restart cosmic-notifications-ng
+   systemctl --user restart cosmic-ext-notifications
    ```
 
 3. Check for syntax errors:
@@ -420,7 +420,7 @@ import <nixpkgs/nixos/tests/make-test-python.nix> ({ pkgs, ... }: {
 **Solutions:**
 1. Kill conflicting daemons:
    ```bash
-   pkill -f cosmic-notifications
+   pkill -f cosmic-ext-notifications
    pkill -f notification-daemon
    ```
 
@@ -455,7 +455,7 @@ import <nixpkgs/nixos/tests/make-test-python.nix> ({ pkgs, ... }: {
 
 3. Monitor resource usage:
    ```bash
-   systemctl --user show cosmic-notifications-ng | grep Memory
+   systemctl --user show cosmic-ext-notifications | grep Memory
    ```
 
 ## Advanced Configuration
@@ -466,14 +466,14 @@ Each user can have different settings via home-manager:
 
 ```nix
 home-manager.users.alice = {
-  xdg.configFile."cosmic-notifications-ng/config.toml".text = ''
+  xdg.configFile."cosmic-ext-notifications/config.toml".text = ''
     show_images = true
     max_image_size = 256
   '';
 };
 
 home-manager.users.bob = {
-  xdg.configFile."cosmic-notifications-ng/config.toml".text = ''
+  xdg.configFile."cosmic-ext-notifications/config.toml".text = ''
     show_images = false
     enable_animations = false
   '';
@@ -485,7 +485,7 @@ home-manager.users.bob = {
 Override package features:
 
 ```nix
-services.cosmic-notifications-ng.package = pkgs.cosmic-notifications-ng.overrideAttrs (oldAttrs: {
+services.cosmic-ext-notifications.package = pkgs.cosmic-ext-notifications.overrideAttrs (oldAttrs: {
   buildFeatures = [ "systemd" "custom-feature" ];
 
   preBuild = ''
@@ -503,8 +503,8 @@ Coordinate with other notification systems:
 systemd.user.services.dunst.enable = false;
 systemd.user.services.mako.enable = false;
 
-# Ensure cosmic-notifications-ng starts after other services
-systemd.user.services.cosmic-notifications-ng = {
+# Ensure cosmic-ext-notifications starts after other services
+systemd.user.services.cosmic-ext-notifications = {
   after = [ "pipewire.service" "wireplumber.service" ];
   wants = [ "pipewire.service" ];
 };
@@ -514,17 +514,17 @@ systemd.user.services.cosmic-notifications-ng = {
 
 ### Updating the Module
 
-When updating cosmic-notifications-ng:
+When updating cosmic-ext-notifications:
 
 ```bash
 # Update flake input
-nix flake update cosmic-notifications-ng
+nix flake update cosmic-ext-notifications
 
 # Rebuild system
 sudo nixos-rebuild switch
 
 # Restart user session or just the service
-systemctl --user restart cosmic-notifications-ng
+systemctl --user restart cosmic-ext-notifications
 ```
 
 ### Module Development
@@ -568,4 +568,4 @@ Improvements to the NixOS module are welcome. Please:
 
 ## License
 
-This module follows the same license as cosmic-notifications-ng.
+This module follows the same license as cosmic-ext-notifications.

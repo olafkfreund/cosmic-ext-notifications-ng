@@ -5,7 +5,7 @@ use cosmic::iced::Length;
 use cosmic::iced_widget::{column, container};
 use cosmic::widget::{icon, text};
 use cosmic::Element;
-use cosmic_notifications_util::{
+use cosmic_ext_notifications_util::{
     parse_markup, sanitize_html, Image, Notification, NotificationImage,
     NotificationLink, ProcessedImage,
 };
@@ -148,7 +148,7 @@ pub fn render_body_with_links(
 
 /// Extract progress value from notification hints
 pub fn get_progress_from_hints(n: &Notification) -> Option<f32> {
-    use cosmic_notifications_util::Hint;
+    use cosmic_ext_notifications_util::Hint;
     use crate::widgets::should_show_progress;
 
     for hint in &n.hints {

@@ -265,7 +265,7 @@ for i in {1..10}; do
 done
 
 # Check memory usage
-ps aux | grep cosmic-notifications
+ps aux | grep cosmic-ext-notifications
 ```
 
 **Expected:**
@@ -282,7 +282,7 @@ Test animation frame rate:
 notify-send -i /path/to/large-animation.gif "Animation Test" "Performance test"
 
 # Monitor CPU usage
-top -p $(pgrep cosmic-notifications)
+top -p $(pgrep cosmic-ext-notifications)
 ```
 
 **Expected:**
@@ -293,8 +293,8 @@ top -p $(pgrep cosmic-notifications)
 ## Troubleshooting
 
 ### Notifications not appearing
-- Check if cosmic-notifications daemon is running: `pgrep cosmic-notifications`
-- Check logs: `journalctl -u cosmic-notifications -f`
+- Check if cosmic-ext-notifications daemon is running: `pgrep cosmic-ext-notifications`
+- Check logs: `journalctl -u cosmic-ext-notifications -f`
 - Verify D-Bus service: `dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.ListNames | grep Notifications`
 
 ### Images not displaying
@@ -328,7 +328,7 @@ When reporting notification issues, please include:
 4. Screenshots/recordings if possible
 5. Application name and version
 6. Notification D-Bus message (if available)
-7. Logs from `journalctl -u cosmic-notifications`
+7. Logs from `journalctl -u cosmic-ext-notifications`
 
 Example D-Bus message capture:
 

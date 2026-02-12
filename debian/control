@@ -1,4 +1,4 @@
-Source: cosmic-notifications
+Source: cosmic-ext-notifications
 Section: admin
 Priority: optional
 Maintainer: Ashley Wulber <ashley@system76.com>
@@ -13,11 +13,11 @@ Build-Depends:
   libwayland-dev,
   pkg-config,
 Standards-Version: 4.3.0
-Homepage: https://github.com/pop-os/cosmic-notifications
+Homepage: https://github.com/olafkfreund/cosmic-notifications-ng
 
-Package: cosmic-notifications
+Package: cosmic-ext-notifications
 Architecture: amd64 arm64
 Depends:
   ${misc:Depends},
   ${shlibs:Depends}
-Description: Cosmic Notifications
+Description: COSMIC Ext Notifications

@@ -1,4 +1,4 @@
-# Quick Start Guide - cosmic-notifications-ng NixOS Module
+# Quick Start Guide - cosmic-ext-notifications NixOS Module
 
 ## 5-Minute Setup
 
@@ -7,14 +7,14 @@
 ```nix
 {
   inputs = {
-    cosmic-notifications-ng.url = "github:username/cosmic-notifications-ng";
-    cosmic-notifications-ng.inputs.nixpkgs.follows = "nixpkgs";
+    cosmic-ext-notifications.url = "github:username/cosmic-ext-notifications";
+    cosmic-ext-notifications.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { nixpkgs, cosmic-notifications-ng, ... }: {
+  outputs = { nixpkgs, cosmic-ext-notifications, ... }: {
     nixosConfigurations.your-host = nixpkgs.lib.nixosSystem {
       modules = [
-        cosmic-notifications-ng.nixosModules.default
+        cosmic-ext-notifications.nixosModules.default
         ./configuration.nix
       ];
     };
@@ -28,7 +28,7 @@
 # configuration.nix
 {
   services.desktopManager.cosmic.enable = true;
-  services.cosmic-notifications-ng.enable = true;
+  services.cosmic-ext-notifications.enable = true;
 }
 ```
 
@@ -42,7 +42,7 @@ sudo nixos-rebuild switch
 ### 4. Verify
 
 ```bash
-notify-send "Success!" "cosmic-notifications-ng is working"
+notify-send "Success!" "cosmic-ext-notifications is working"
 ```
 
 ## Common Configurations
@@ -50,7 +50,7 @@ notify-send "Success!" "cosmic-notifications-ng is working"
 ### Default (Recommended)
 
 ```nix
-services.cosmic-notifications-ng.enable = true;
+services.cosmic-ext-notifications.enable = true;
 ```
 
 All features enabled with sensible defaults.
@@ -58,7 +58,7 @@ All features enabled with sensible defaults.
 ### Privacy Mode
 
 ```nix
-services.cosmic-notifications-ng = {
+services.cosmic-ext-notifications = {
   enable = true;
   settings = {
     show_images = false;
@@ -73,7 +73,7 @@ No external content loading.
 ### Performance Mode
 
 ```nix
-services.cosmic-notifications-ng = {
+services.cosmic-ext-notifications = {
   enable = true;
   settings = {
     max_image_size = 64;
@@ -87,7 +87,7 @@ Minimal resource usage.
 ### Feature Complete
 
 ```nix
-services.cosmic-notifications-ng = {
+services.cosmic-ext-notifications = {
   enable = true;
   settings = {
     show_images = true;
@@ -106,8 +106,8 @@ All bells and whistles.
 ### Service not running?
 
 ```bash
-systemctl --user status cosmic-notifications-ng
-journalctl --user -u cosmic-notifications-ng -f
+systemctl --user status cosmic-ext-notifications
+journalctl --user -u cosmic-ext-notifications -f
 ```
 
 ### Notifications not showing?
@@ -153,6 +153,6 @@ dbus-send --session --print-reply \
 ## Support
 
 - Issues: GitHub issue tracker
-- Logs: `journalctl --user -u cosmic-notifications-ng`
-- Status: `systemctl --user status cosmic-notifications-ng`
-- Config: `~/.config/cosmic-notifications-ng/config.toml`
+- Logs: `journalctl --user -u cosmic-ext-notifications`
+- Status: `systemctl --user status cosmic-ext-notifications`
+- Config: `~/.config/cosmic-ext-notifications/config.toml`

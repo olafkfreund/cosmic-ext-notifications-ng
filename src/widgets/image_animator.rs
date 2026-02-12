@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 #[cfg(feature = "image")]
-use cosmic_notifications_util::AnimatedImage;
+use cosmic_ext_notifications_util::AnimatedImage;
 
 /// Controls playback of an animated image
 pub struct ImageAnimator {

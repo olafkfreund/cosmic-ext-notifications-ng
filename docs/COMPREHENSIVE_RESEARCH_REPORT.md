@@ -1,7 +1,7 @@
 # Comprehensive Research Report: COSMIC Desktop Notification System
 
 > **Generated:** 2026-02-05
-> **Version:** cosmic-notifications-ng v0.2.3
+> **Version:** cosmic-ext-notifications v0.2.3
 > **Scope:** Full architecture review, optimization opportunities, and improvement roadmap
 
 ---
@@ -73,7 +73,7 @@ This report synthesizes findings from 6 parallel research agents analyzing the L
 ### 1.2 Codebase Structure
 
 ```
-cosmic-notifications-ng/
+cosmic-ext-notifications/
 ├── src/
 │   ├── main.rs                    # Entry point
 │   ├── app.rs                     # ⚠️ Main application (1183 lines - needs decomposition)
@@ -92,7 +92,7 @@ cosmic-notifications-ng/
 │       ├── action_buttons.rs      # Action button rendering
 │       └── image_animator.rs      # GIF animation
 │
-├── cosmic-notifications-util/     # Shared utility library
+├── cosmic-ext-notifications-util/     # Shared utility library
 │   └── src/
 │       ├── lib.rs                 # Core notification types
 │       ├── sanitizer.rs           # HTML sanitization
@@ -102,7 +102,7 @@ cosmic-notifications-ng/
 │       ├── image.rs               # Image processing
 │       └── ...
 │
-└── cosmic-notifications-config/   # Configuration crate
+└── cosmic-ext-notifications-config/   # Configuration crate
     └── src/lib.rs                 # Config schema (v2)
 ```
 
@@ -204,7 +204,7 @@ vec![
 
 ### 2.5 Comparison with Other Implementations
 
-| Feature | cosmic-notifications-ng | dunst | mako | swaync |
+| Feature | cosmic-ext-notifications | dunst | mako | swaync |
 |---------|------------------------|-------|------|--------|
 | Wayland Native | ✅ | ✅ | ✅ | ✅ |
 | Image Support | ✅ Full | ✅ | ✅ | ✅ |
@@ -226,7 +226,7 @@ The notification daemon communicates with the COSMIC panel applet via D-Bus:
 
 ```
 ┌─────────────────────────┐     D-Bus      ┌─────────────────────────┐
-│ cosmic-notifications-ng │ ◄────────────► │ cosmic-applet-          │
+│ cosmic-ext-notifications │ ◄────────────► │ cosmic-applet-          │
 │ (Daemon)                │                │ notifications           │
 │                         │                │ (Panel Widget)          │
 │ Serves:                 │                │                         │
@@ -242,10 +242,10 @@ The notification daemon communicates with the COSMIC panel applet via D-Bus:
 
 ### 3.2 Shared Data Structures
 
-The `cosmic-notifications-util` crate provides shared types used by both daemon and applet:
+The `cosmic-ext-notifications-util` crate provides shared types used by both daemon and applet:
 
 ```rust
-// cosmic-notifications-util/src/lib.rs
+// cosmic-ext-notifications-util/src/lib.rs
 pub struct Notification {
     pub id: u32,
     pub app_name: String,
@@ -289,7 +289,7 @@ GNOME applications work via standard D-Bus notification interface:
 Sandboxed apps use `xdg-desktop-portal` which proxies notifications:
 
 ```
-Flatpak App → xdg-desktop-portal → D-Bus → cosmic-notifications-ng
+Flatpak App → xdg-desktop-portal → D-Bus → cosmic-ext-notifications
 ```
 
 ---
@@ -478,7 +478,7 @@ impl NotificationService {
 ### 6.1 Current Configuration (v2)
 
 ```rust
-// cosmic-notifications-config/src/lib.rs
+// cosmic-ext-notifications-config/src/lib.rs
 pub struct NotificationsConfig {
     pub do_not_disturb: bool,           // Global mute
     pub anchor: Anchor,                 // Position (8 options)
@@ -719,7 +719,7 @@ dbus-send --session \
 
 ## Conclusion
 
-The cosmic-notifications-ng project is a well-implemented FreeDesktop-compliant notification daemon with several advanced features (rate limiting, security hardening, rich content support). The main areas for improvement are:
+The cosmic-ext-notifications project is a well-implemented FreeDesktop-compliant notification daemon with several advanced features (rate limiting, security hardening, rich content support). The main areas for improvement are:
 
 1. **Code organization** - Decomposing the monolithic `app.rs`
 2. **Performance** - Arc-wrapping image data, static regex compilation

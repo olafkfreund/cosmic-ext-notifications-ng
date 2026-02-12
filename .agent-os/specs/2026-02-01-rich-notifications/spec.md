@@ -1,13 +1,13 @@
 # Rich Notifications Implementation Spec
 
-> Spec: Rich Notifications for cosmic-notifications-ng
+> Spec: Rich Notifications for cosmic-ext-notifications
 > Created: 2026-02-01
 > Status: Planning
 > Reference: cosmic-connect-desktop-app Rich Notifications (Issues #120-#126)
 
 ## Overview
 
-Implement rich notification support in cosmic-notifications-ng by porting the proven implementation from cosmic-connect-desktop-app. This will replace the current basic text-only notification display with a full-featured notification system supporting images, formatted text, action buttons, progress indicators, and clickable links.
+Implement rich notification support in cosmic-ext-notifications by porting the proven implementation from cosmic-connect-desktop-app. This will replace the current basic text-only notification display with a full-featured notification system supporting images, formatted text, action buttons, progress indicators, and clickable links.
 
 ## User Stories
 
@@ -75,7 +75,7 @@ As a desktop user, I want to see animated GIFs and other animated images in noti
 
 ## Architecture Overview
 
-### Current Architecture (cosmic-notifications-ng)
+### Current Architecture (cosmic-ext-notifications)
 ```
 DBus (org.freedesktop.Notifications.Notify)
     ↓

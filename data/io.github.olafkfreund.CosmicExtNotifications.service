@@ -1,0 +1,12 @@
+[Unit]
+Description=COSMIC Ext Notification Daemon
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cosmic-ext-notifications
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

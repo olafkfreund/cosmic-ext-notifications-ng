@@ -45,8 +45,8 @@ use cosmic::iced_runtime::core::window::Id as SurfaceId;
 use cosmic::iced_widget::{column, row, vertical_space};
 use cosmic::widget::{autosize, button, container, icon, text};
 use cosmic::{Application, Element, app::Task};
-use cosmic_notifications_config::NotificationsConfig;
-use cosmic_notifications_util::{
+use cosmic_ext_notifications_config::NotificationsConfig;
+use cosmic_ext_notifications_util::{
     ActionId, CloseReason, Notification, NotificationLink,
     detect_links, extract_hrefs, sanitize_html, strip_html,
 };
@@ -198,7 +198,7 @@ impl CosmicNotifications {
             .collect();
 
         // Check if body contains HTML markup for styled rendering
-        let has_markup = cosmic_notifications_util::has_rich_content(&body_text);
+        let has_markup = cosmic_ext_notifications_util::has_rich_content(&body_text);
 
         // Strip HTML for link detection and plain text fallback
         let display_body_str = strip_html(&sanitize_html(&body_text));
@@ -640,11 +640,11 @@ impl cosmic::Application for CosmicNotifications {
     type Message = Message;
     type Executor = cosmic::executor::single::Executor;
     type Flags = ();
-    const APP_ID: &'static str = "com.system76.CosmicNotifications";
+    const APP_ID: &'static str = "io.github.olafkfreund.CosmicExtNotifications";
 
     fn init(core: Core, _flags: ()) -> (Self, Task<Message>) {
         let helper = Config::new(
-            cosmic_notifications_config::ID,
+            cosmic_ext_notifications_config::ID,
             NotificationsConfig::VERSION,
         )
         .ok();
@@ -771,8 +771,8 @@ impl cosmic::Application for CosmicNotifications {
             }
             Message::LinkClicked(url) => {
                 // Open link in default browser
-                if cosmic_notifications_util::is_safe_url(&url) {
-                    if let Err(e) = cosmic_notifications_util::open_link(&url) {
+                if cosmic_ext_notifications_util::is_safe_url(&url) {
+                    if let Err(e) = cosmic_ext_notifications_util::open_link(&url) {
                         tracing::error!("Failed to open link {}: {}", url, e);
                     }
                 } else {
@@ -844,7 +844,7 @@ impl cosmic::Application for CosmicNotifications {
     fn subscription(&self) -> Subscription<Message> {
         Subscription::batch(vec![
             self.core
-                .watch_config(cosmic_notifications_config::ID)
+                .watch_config(cosmic_ext_notifications_config::ID)
                 .map(|u| {
                     for why in u
                         .errors

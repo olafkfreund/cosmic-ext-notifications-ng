@@ -1,4 +1,4 @@
-# NixOS VM test for cosmic-notifications-ng module
+# NixOS VM test for cosmic-ext-notifications module
 # Run with: nixos-rebuild build-vm -I nixos-config=./nix/test.nix
 
 { config, pkgs, lib, ... }:
@@ -18,8 +18,8 @@
   services.desktopManager.cosmic.enable = true;
   services.displayManager.cosmic-greeter.enable = true;
 
-  # Enable cosmic-notifications-ng
-  services.cosmic-notifications-ng = {
+  # Enable cosmic-ext-notifications
+  services.cosmic-ext-notifications = {
     enable = true;
     settings = {
       show_images = true;

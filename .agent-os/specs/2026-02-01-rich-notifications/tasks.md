@@ -13,8 +13,8 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
   - [ ] 1.1 Write tests for `NotificationLink` serialization/deserialization
   - [ ] 1.2 Write tests for `NotificationAction` struct
   - [ ] 1.3 Write tests for `NotificationUrgency` enum conversions
-  - [ ] 1.4 Add `NotificationLink` struct to `cosmic-notifications-util`
-  - [ ] 1.5 Add `NotificationAction` struct to `cosmic-notifications-util`
+  - [ ] 1.4 Add `NotificationLink` struct to `cosmic-ext-notifications-util`
+  - [ ] 1.5 Add `NotificationAction` struct to `cosmic-ext-notifications-util`
   - [ ] 1.6 Add `NotificationUrgency` enum with From<u8> impl
   - [ ] 1.7 Extend `Notification` struct with rich content fields
   - [ ] 1.8 Verify all tests pass
@@ -24,7 +24,7 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
   - [ ] 2.2 Write tests for RGBA/RGB conversion
   - [ ] 2.3 Write tests for rowstride handling
   - [ ] 2.4 Write tests for PNG encoding/decoding
-  - [ ] 2.5 Create `notification_image.rs` module in cosmic-notifications-util
+  - [ ] 2.5 Create `notification_image.rs` module in cosmic-ext-notifications-util
   - [ ] 2.6 Implement `NotificationImage` struct with `from_raw_data()` method
   - [ ] 2.7 Implement `from_path()` for file-based images
   - [ ] 2.8 Implement resize logic (max 128x128, Lanczos3)
@@ -37,7 +37,7 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
   - [ ] 3.3 Write tests for dangerous attribute removal (onclick, onerror)
   - [ ] 3.4 Write tests for javascript: URL blocking
   - [ ] 3.5 Add `ammonia` dependency to Cargo.toml
-  - [ ] 3.6 Create `sanitizer.rs` module in cosmic-notifications-util
+  - [ ] 3.6 Create `sanitizer.rs` module in cosmic-ext-notifications-util
   - [ ] 3.7 Implement `sanitize_html()` function with ammonia
   - [ ] 3.8 Implement `has_rich_content()` detection helper
   - [ ] 3.9 Verify all tests pass
@@ -155,7 +155,7 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
   - [x] 14.3 Add `max_image_size` config option (default: 128)
   - [x] 14.4 Add `enable_links` config option (default: true)
   - [x] 14.5 Add `enable_animations` config option (default: true)
-  - [x] 14.6 Update cosmic-notifications-config
+  - [x] 14.6 Update cosmic-ext-notifications-config
   - [x] 14.7 Wire config to rendering logic
   - [x] 14.8 Test config changes apply correctly
 
@@ -221,11 +221,11 @@ Phase 4 (Polish):
 ## Files to Create/Modify
 
 ### New Files
-- `cosmic-notifications-util/src/notification_image.rs`
-- `cosmic-notifications-util/src/animated_image.rs`
-- `cosmic-notifications-util/src/sanitizer.rs`
-- `cosmic-notifications-util/src/link.rs`
-- `cosmic-notifications-util/src/action.rs`
+- `cosmic-ext-notifications-util/src/notification_image.rs`
+- `cosmic-ext-notifications-util/src/animated_image.rs`
+- `cosmic-ext-notifications-util/src/sanitizer.rs`
+- `cosmic-ext-notifications-util/src/link.rs`
+- `cosmic-ext-notifications-util/src/action.rs`
 - `src/widgets/rich_card.rs`
 - `src/widgets/action_buttons.rs`
 - `src/widgets/progress_bar.rs`
@@ -233,10 +233,10 @@ Phase 4 (Polish):
 - `scripts/test_rich_notifications.sh`
 
 ### Modified Files
-- `cosmic-notifications-util/src/lib.rs` (Notification struct, exports)
-- `cosmic-notifications-util/src/image.rs` (enhance existing)
-- `cosmic-notifications-util/Cargo.toml` (new dependencies)
-- `cosmic-notifications-config/src/lib.rs` (new config options)
+- `cosmic-ext-notifications-util/src/lib.rs` (Notification struct, exports)
+- `cosmic-ext-notifications-util/src/image.rs` (enhance existing)
+- `cosmic-ext-notifications-util/Cargo.toml` (new dependencies)
+- `cosmic-ext-notifications-config/src/lib.rs` (new config options)
 - `src/app.rs` (new message types, rendering)
 - `src/subscriptions/notifications.rs` (enhanced parsing)
 - `Cargo.toml` (workspace dependencies)
@@ -247,5 +247,5 @@ Phase 4 (Polish):
 - **cosmic-connect-desktop-app Rich Notifications**: Closed issues #120-#126
 - **cosmic-connect-protocol/src/plugins/notification.rs**: Data structures
 - **cosmic-connect-daemon/src/notification_image.rs**: Image processing
-- **cosmic-connect-daemon/src/cosmic_notifications.rs**: DBus integration
+- **cosmic-connect-daemon/src/cosmic_ext_notifications.rs**: DBus integration
 - **Freedesktop Notification Spec**: https://specifications.freedesktop.org/notification-spec/

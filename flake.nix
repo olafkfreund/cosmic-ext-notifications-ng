@@ -60,15 +60,15 @@
         };
 
         cargoArtifacts = craneLib.buildDepsOnly pkgDef;
-        cosmic-notifications-daemon= craneLib.buildPackage (pkgDef // {
+        cosmic-ext-notifications-daemon= craneLib.buildPackage (pkgDef // {
           inherit cargoArtifacts;
         });
       in {
         checks = {
-          inherit cosmic-notifications-daemon;
+          inherit cosmic-ext-notifications-daemon;
         };
 
-        packages.default = cosmic-notifications-daemon.overrideAttrs (oldAttrs: rec {
+        packages.default = cosmic-ext-notifications-daemon.overrideAttrs (oldAttrs: rec {
           buildPhase= ''
             just prefix=$out build-release
           '';
@@ -78,7 +78,7 @@
         });
 
         apps.default = flake-utils.lib.mkApp {
-          drv = cosmic-notifications-daemon;
+          drv = cosmic-ext-notifications-daemon;
         };
 
         devShells.default = pkgs.mkShell rec {
@@ -88,13 +88,13 @@
       }) // {
         nixosModules = {
           default = import ./nix/module.nix;
-          cosmic-notifications-ng = import ./nix/module.nix;
+          cosmic-ext-notifications = import ./nix/module.nix;
         };
 
         overlays = {
           default = final: prev: {
             cosmic-notifications = self.packages.${prev.system}.default;
-            cosmic-notifications-ng = self.packages.${prev.system}.default;
+            cosmic-ext-notifications = self.packages.${prev.system}.default;
           };
         };
       };

@@ -3,7 +3,7 @@
 use cosmic::iced::Length;
 use cosmic::widget::{container, icon};
 use cosmic::Element;
-use cosmic_notifications_util::ProcessedImage;
+use cosmic_ext_notifications_util::ProcessedImage;
 use std::time::Instant;
 
 /// Size variants for notification images

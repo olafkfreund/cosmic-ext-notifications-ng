@@ -1,16 +1,16 @@
-# Cosmic Notifications NG
+# COSMIC Ext Notifications
 
 [![Version](https://img.shields.io/badge/version-0.4.1-blue.svg)](https://github.com/olafkfreund/cosmic-notifications-ng/releases/tag/v0.4.1)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
 
-Enhanced Layer Shell notifications daemon for the COSMIC desktop environment, featuring **rich notification support** including images, action buttons, progress indicators, clickable URLs, animated content, **per-app notification rules**, and **notification grouping**.
+Enhanced Layer Shell notifications daemon for the COSMIC™ desktop environment, featuring **rich notification support** including images, action buttons, progress indicators, clickable URLs, animated content, **per-app notification rules**, and **notification grouping**.
 
 ## What Makes This Different
 
 This is an enhanced fork of the standard COSMIC notifications daemon with significant improvements:
 
-| Feature | Standard COSMIC | COSMIC Notifications NG |
-|---------|-----------------|------------------------|
+| Feature | Standard COSMIC | COSMIC Ext Notifications |
+|---------|-----------------|-------------------------|
 | **Image Support** | Basic icon display | Full image-path/image-data hints, auto-resizing, preview images |
 | **Image Scaling** | Fixed sizes | Dynamic scaling up to 128x128 with proper aspect ratio |
 | **Animated Images** | Not supported | GIF, APNG, WebP with frame timing (100 frames/30s limits) |
@@ -310,20 +310,20 @@ Add this flake to your `flake.nix` inputs:
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    cosmic-notifications-ng.url = "github:olafkfreund/cosmic-notifications-ng";
+    cosmic-ext-notifications.url = "github:olafkfreund/cosmic-notifications-ng";
   };
 
-  outputs = { self, nixpkgs, cosmic-notifications-ng, ... }: {
+  outputs = { self, nixpkgs, cosmic-ext-notifications, ... }: {
     nixosConfigurations.your-hostname = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
         # Use the overlay to replace system cosmic-notifications
-        { nixpkgs.overlays = [ cosmic-notifications-ng.overlays.default ]; }
+        { nixpkgs.overlays = [ cosmic-ext-notifications.overlays.default ]; }
 
         # Or use the NixOS module for more control
-        cosmic-notifications-ng.nixosModules.default
+        cosmic-ext-notifications.nixosModules.default
         {
-          services.cosmic-notifications-ng = {
+          services.cosmic-ext-notifications = {
             enable = true;
             settings = {
               show_images = true;
@@ -345,7 +345,7 @@ Add this flake to your `flake.nix` inputs:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enable` | bool | `false` | Enable the notification daemon |
-| `package` | package | `pkgs.cosmic-notifications-ng` | Package to use |
+| `package` | package | `pkgs.cosmic-ext-notifications` | Package to use |
 | `replaceSystemPackage` | bool | `true` | Replace system cosmic-notifications via overlay |
 | `settings.show_images` | bool | `true` | Show images in notifications |
 | `settings.show_actions` | bool | `true` | Show action buttons |
@@ -365,7 +365,7 @@ For a simple drop-in replacement without configuration:
 {
   nixpkgs.overlays = [
     (final: prev: {
-      cosmic-notifications = cosmic-notifications-ng.packages.${prev.system}.default;
+      cosmic-notifications = cosmic-ext-notifications.packages.${prev.system}.default;
     })
   ];
 }
@@ -377,7 +377,7 @@ After rebuilding (`sudo nixos-rebuild switch`), restart the COSMIC panel to load
 
 ```bash
 # Check which binary is running
-ls -la /proc/$(pgrep -f cosmic-notifications | head -1)/exe
+ls -la /proc/$(pgrep -f cosmic-ext-notifications | head -1)/exe
 
 # Send a test notification with image
 gdbus call --session \
@@ -422,7 +422,7 @@ just vendor
 
 # Inside build chroot
 just build-vendored
-sudo just rootdir=debian/cosmic-notifications prefix=/usr install
+sudo just rootdir=debian/cosmic-ext-notifications prefix=/usr install
 ```
 
 # Translators
@@ -433,4 +433,4 @@ Translation files may be found in the i18n directory. New translations may copy 
 
 ## Profiling async tasks with tokio-console
 
-To debug issues with asynchronous code, install [tokio-console](https://github.com/tokio-rs/console) and run it within a separate terminal. Then kill the **cosmic-notifications** process a couple times in quick succession to prevent **cosmic-session** from spawning it again. Then you can start **cosmic-notifications** with **tokio-console** support either by running `just tokio-console` from this repository to test code changes, or `env TOKIO_CONSOLE=1 cosmic-notifications` to enable it with the installed version of **cosmic-notifications**.
+To debug issues with asynchronous code, install [tokio-console](https://github.com/tokio-rs/console) and run it within a separate terminal. Then kill the **cosmic-ext-notifications** process a couple times in quick succession to prevent **cosmic-session** from spawning it again. Then you can start **cosmic-ext-notifications** with **tokio-console** support either by running `just tokio-console` from this repository to test code changes, or `env TOKIO_CONSOLE=1 cosmic-ext-notifications` to enable it with the installed version of **cosmic-ext-notifications**.

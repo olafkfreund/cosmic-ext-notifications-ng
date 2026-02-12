@@ -4,7 +4,7 @@ use cosmic::iced::Alignment;
 use cosmic::iced_widget::row;
 use cosmic::widget::button;
 use cosmic::Element;
-use cosmic_notifications_util::{ActionId, NotificationAction};
+use cosmic_ext_notifications_util::{ActionId, NotificationAction};
 
 /// Maximum number of action buttons to display
 const MAX_VISIBLE_ACTIONS: usize = 3;

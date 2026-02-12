@@ -1,6 +1,6 @@
-# NixOS Module for COSMIC Notifications NG
+# NixOS Module for COSMIC Ext Notifications
 
-This directory contains the NixOS module for integrating `cosmic-notifications-ng` with your NixOS system.
+This directory contains the NixOS module for integrating `cosmic-ext-notifications` with your NixOS system.
 
 ## Features
 
@@ -20,20 +20,20 @@ Add this flake to your NixOS configuration:
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    cosmic-notifications-ng = {
-      url = "github:username/cosmic-notifications-ng";
+    cosmic-ext-notifications = {
+      url = "github:username/cosmic-ext-notifications";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { nixpkgs, cosmic-notifications-ng, ... }: {
+  outputs = { nixpkgs, cosmic-ext-notifications, ... }: {
     nixosConfigurations.your-hostname = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        cosmic-notifications-ng.nixosModules.default
+        cosmic-ext-notifications.nixosModules.default
         {
           services.desktopManager.cosmic.enable = true;
-          services.cosmic-notifications-ng.enable = true;
+          services.cosmic-ext-notifications.enable = true;
         }
       ];
     };
@@ -50,11 +50,11 @@ If you're not using flakes, import the module directly:
 
 {
   imports = [
-    /path/to/cosmic-notifications-ng/nix/module.nix
+    /path/to/cosmic-ext-notifications/nix/module.nix
   ];
 
   services.desktopManager.cosmic.enable = true;
-  services.cosmic-notifications-ng.enable = true;
+  services.cosmic-ext-notifications.enable = true;
 }
 ```
 
@@ -64,7 +64,7 @@ If you're not using flakes, import the module directly:
 
 ```nix
 {
-  services.cosmic-notifications-ng = {
+  services.cosmic-ext-notifications = {
     enable = true;
 
     settings = {
@@ -82,9 +82,9 @@ If you're not using flakes, import the module directly:
 
 ```nix
 {
-  services.cosmic-notifications-ng = {
+  services.cosmic-ext-notifications = {
     enable = true;
-    package = pkgs.cosmic-notifications-ng.override {
+    package = pkgs.cosmic-ext-notifications.override {
       enableSystemd = true;
     };
   };
@@ -95,7 +95,7 @@ If you're not using flakes, import the module directly:
 
 ```nix
 {
-  services.cosmic-notifications-ng = {
+  services.cosmic-ext-notifications = {
     enable = true;
 
     settings = {
@@ -112,7 +112,7 @@ If you're not using flakes, import the module directly:
 
 ```nix
 {
-  services.cosmic-notifications-ng = {
+  services.cosmic-ext-notifications = {
     enable = true;
 
     settings = {
@@ -128,23 +128,23 @@ If you're not using flakes, import the module directly:
 
 ## Available Options
 
-### `services.cosmic-notifications-ng.enable`
+### `services.cosmic-ext-notifications.enable`
 **Type:** `boolean`
 **Default:** `false`
 
 Enable the COSMIC Notifications NG daemon.
 
-### `services.cosmic-notifications-ng.package`
+### `services.cosmic-ext-notifications.package`
 **Type:** `package`
-**Default:** `pkgs.cosmic-notifications-ng`
+**Default:** `pkgs.cosmic-ext-notifications`
 
-The package to use for cosmic-notifications-ng.
+The package to use for cosmic-ext-notifications.
 
-### `services.cosmic-notifications-ng.settings`
+### `services.cosmic-ext-notifications.settings`
 **Type:** `attribute set`
 **Default:** `{}`
 
-Configuration settings for cosmic-notifications-ng.
+Configuration settings for cosmic-ext-notifications.
 
 #### `settings.show_images`
 **Type:** `boolean`
@@ -176,11 +176,11 @@ Enable clickable HTTP/HTTPS links in notification body text.
 
 Enable GIF/APNG/WebP animations (max 100 frames, 30s duration).
 
-### `services.cosmic-notifications-ng.replaceSystemPackage`
+### `services.cosmic-ext-notifications.replaceSystemPackage`
 **Type:** `boolean`
 **Default:** `true`
 
-Replace the system `cosmic-notifications` package with `cosmic-notifications-ng` via overlay.
+Replace the system `cosmic-notifications` package with `cosmic-ext-notifications` via overlay.
 
 ## Security
 
@@ -214,13 +214,13 @@ The module implements comprehensive systemd hardening:
 ### Check Service Status
 
 ```bash
-systemctl --user status cosmic-notifications-ng
+systemctl --user status cosmic-ext-notifications
 ```
 
 ### View Logs
 
 ```bash
-journalctl --user -u cosmic-notifications-ng -f
+journalctl --user -u cosmic-ext-notifications -f
 ```
 
 ### Test Notification
@@ -242,7 +242,7 @@ dbus-send --session --print-reply \
 
 The generated configuration file is located at:
 ```
-~/.config/cosmic-notifications-ng/config.toml
+~/.config/cosmic-ext-notifications/config.toml
 ```
 
 ## Integration with COSMIC
@@ -258,9 +258,9 @@ The module automatically integrates with the COSMIC session:
 1. Enable the module with `replaceSystemPackage = true` (default)
 2. Rebuild your system: `sudo nixos-rebuild switch`
 3. Log out and log back in to COSMIC
-4. Verify with: `systemctl --user status cosmic-notifications-ng`
+4. Verify with: `systemctl --user status cosmic-ext-notifications`
 
-No additional steps needed - the overlay ensures COSMIC uses `cosmic-notifications-ng` automatically.
+No additional steps needed - the overlay ensures COSMIC uses `cosmic-ext-notifications` automatically.
 
 ## Advanced Usage
 
@@ -268,14 +268,14 @@ No additional steps needed - the overlay ensures COSMIC uses `cosmic-notificatio
 
 ```nix
 {
-  services.cosmic-notifications-ng = {
+  services.cosmic-ext-notifications = {
     enable = true;
     replaceSystemPackage = false;  # Don't create overlay
   };
 
   # Manually add to packages
   environment.systemPackages = with pkgs; [
-    cosmic-notifications-ng
+    cosmic-ext-notifications
   ];
 }
 ```
@@ -284,7 +284,7 @@ No additional steps needed - the overlay ensures COSMIC uses `cosmic-notificatio
 
 ```nix
 {
-  services.cosmic-notifications-ng = {
+  services.cosmic-ext-notifications = {
     enable = true;
     settings = {
       # Configuration is per-user and respects COSMIC panel settings
@@ -299,10 +299,10 @@ No additional steps needed - the overlay ensures COSMIC uses `cosmic-notificatio
 To improve this module:
 
 1. Test changes with `nixos-rebuild test`
-2. Verify systemd hardening with `systemd-analyze security cosmic-notifications-ng`
+2. Verify systemd hardening with `systemd-analyze security cosmic-ext-notifications`
 3. Check for warnings: review NixOS build output
 4. Submit pull request with documentation updates
 
 ## License
 
-This module follows the same license as cosmic-notifications-ng.
+This module follows the same license as cosmic-ext-notifications.

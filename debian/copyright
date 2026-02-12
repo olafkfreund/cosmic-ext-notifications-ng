@@ -1,6 +1,6 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: cosmic-notifications
-Source: https://github.com/pop-os/cosmic-notifications
+Upstream-Name: cosmic-ext-notifications
+Source: https://github.com/olafkfreund/cosmic-notifications-ng
 
 Files: *
 Copyright: Copyright 2022 System76

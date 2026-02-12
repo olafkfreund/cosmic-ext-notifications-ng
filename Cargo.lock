@@ -1270,27 +1270,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-freedesktop-icons"
-version = "0.4.0"
-source = "git+https://github.com/pop-os/freedesktop-icons#7a61a704f6d1ec41f71cbe766e3cc484858523fa"
-dependencies = [
- "bstr",
- "btoi",
- "memchr",
- "memmap2 0.9.9",
- "thiserror 2.0.18",
- "tracing",
- "xdg",
-]
-
-[[package]]
-name = "cosmic-notifications"
+name = "cosmic-ext-notifications"
 version = "0.4.1"
 dependencies = [
  "anyhow",
  "color-backtrace",
- "cosmic-notifications-config",
- "cosmic-notifications-util",
+ "cosmic-ext-notifications-config",
+ "cosmic-ext-notifications-util",
  "cosmic-panel-config",
  "cosmic-time",
  "i18n-embed",
@@ -1308,7 +1294,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-notifications-config"
+name = "cosmic-ext-notifications-config"
 version = "0.2.2"
 dependencies = [
  "cosmic-config",
@@ -1317,11 +1303,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-notifications-util"
+name = "cosmic-ext-notifications-util"
 version = "0.2.2"
 dependencies = [
  "ammonia",
- "cosmic-notifications-config",
+ "cosmic-ext-notifications-config",
  "fast_image_resize",
  "image",
  "libcosmic",
@@ -1335,6 +1321,20 @@ dependencies = [
  "tracing",
  "url",
  "zbus 5.13.2",
+]
+
+[[package]]
+name = "cosmic-freedesktop-icons"
+version = "0.4.0"
+source = "git+https://github.com/pop-os/freedesktop-icons#7a61a704f6d1ec41f71cbe766e3cc484858523fa"
+dependencies = [
+ "bstr",
+ "btoi",
+ "memchr",
+ "memmap2 0.9.9",
+ "thiserror 2.0.18",
+ "tracing",
+ "xdg",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 use crate::subscriptions::notifications;
 use cosmic::surface;
-use cosmic_notifications_util::ActionId;
+use cosmic_ext_notifications_util::ActionId;
 use cosmic_time::Instant;
 
 /// Application message types
@@ -17,7 +17,7 @@ pub enum Message {
     /// Notification timeout expired
     Timeout(u32),
     /// Configuration updated
-    Config(cosmic_notifications_config::NotificationsConfig),
+    Config(cosmic_ext_notifications_config::NotificationsConfig),
     /// Panel configuration updated
     PanelConfig(cosmic_panel_config::CosmicPanelConfig),
     /// Dock configuration updated

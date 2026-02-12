@@ -7,7 +7,7 @@ use cosmic::{
     },
     iced_futures::Subscription,
 };
-use cosmic_notifications_util::{ActionId, CloseReason, Notification};
+use cosmic_ext_notifications_util::{ActionId, CloseReason, Notification};
 use futures::channel::mpsc;
 use std::{collections::HashMap, fmt::Debug, num::NonZeroU64, time::{Duration, Instant}};
 use tokio::sync::mpsc::{Receiver, Sender, channel};
@@ -444,7 +444,7 @@ impl Notifications {
     async fn get_server_information(
         &self,
     ) -> (&'static str, &'static str, &'static str, &'static str) {
-        ("cosmic-notifications", "System76", VERSION, "1.2")
+        ("cosmic-ext-notifications", "olafkfreund", VERSION, "1.2")
     }
 
     ///
